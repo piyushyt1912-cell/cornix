@@ -12,6 +12,7 @@ import {
   Staff, DailyStaffAttendance, Payslip, 
   getStaffMonthlyAttendance, getPayslips, generatePayslip, updatePayslipStatus 
 } from '@/lib/db';
+import { useToast } from '@/components/Toast';
 
 interface StaffViewProps {
   staff: Staff[];
@@ -41,6 +42,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function StaffView({ staff, onAddStaff, onUpdateStaff, onDeleteStaff, onUpdateStaffStatus, isLightMode, role }: StaffViewProps) {
+  const { showToast } = useToast();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('All');
@@ -460,7 +462,7 @@ export default function StaffView({ staff, onAddStaff, onUpdateStaff, onDeleteSt
                       await onDeleteStaff(removeStaff.id);
                       setRemoveStaff(null);
                     } catch {
-                      alert('Failed to remove staff member.');
+                      showToast('Failed to remove staff member.', 'error');
                     } finally {
                       setRemoveLoading(false);
                     }
@@ -494,6 +496,7 @@ function StaffProfile({ staff, onBack, onUpdate, onStatusChange, isLightMode, is
   isLightMode: boolean;
   isAdmin: boolean;
 }) {
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'payslips'>('overview');
   const [attMonth, setAttMonth] = useState(new Date().toISOString().slice(0, 7));
   const [attendance, setAttendance] = useState<DailyStaffAttendance[]>([]);
@@ -525,9 +528,9 @@ function StaffProfile({ staff, onBack, onUpdate, onStatusChange, isLightMode, is
       await generatePayslip(staff.id, 'staff', staff.name, salary, attMonth, 26);
       const slips = await getPayslips();
       setPayslips(slips.filter(s => s.staffId === staff.id));
-      alert('Payslip generated successfully');
+      showToast('Payslip generated successfully', 'success');
     } catch (err) {
-      alert('Error generating payslip');
+      showToast('Error generating payslip', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -541,7 +544,7 @@ function StaffProfile({ staff, onBack, onUpdate, onStatusChange, isLightMode, is
       const slips = await getPayslips();
       setPayslips(slips.filter(s => s.staffId === staff.id));
     } catch (err) {
-      alert('Error updating status');
+      showToast('Error updating status', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -813,6 +816,8 @@ function AddStaffModal({ isOpen, onClose, onAdd, isLightMode }: any) {
   const [salary, setSalary] = useState('18000');
   const [loading, setLoading] = useState(false);
 
+  const { showToast } = useToast();
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: any) => {
@@ -833,6 +838,9 @@ function AddStaffModal({ isOpen, onClose, onAdd, isLightMode }: any) {
       setName('');
       setPhone('');
       onClose();
+      showToast('Staff member added successfully', 'success');
+    } catch (err) {
+      showToast('Failed to add staff member', 'error');
     } finally {
       setLoading(false);
     }
@@ -924,6 +932,8 @@ function EditStaffModal({ staff, onClose, onSave, isLightMode }: {
   const [salary, setSalary] = useState(staff.salary?.replace(/[^\d]/g, '') || '');
   const [loading, setLoading] = useState(false);
 
+  const { showToast } = useToast();
+
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     setLoading(true);
@@ -937,6 +947,9 @@ function EditStaffModal({ staff, onClose, onSave, isLightMode }: {
         salary: `₹${parseInt(salary).toLocaleString('en-IN')}`,
         type: (role === 'Manager' || role === 'Receptionist') ? 'Admin' : 'Support'
       });
+      showToast('Staff updated successfully', 'success');
+    } catch (err) {
+      showToast('Failed to update staff', 'error');
     } finally {
       setLoading(false);
     }

@@ -72,7 +72,8 @@ export default function DashboardView({ members, attendance, staff, trainers, st
   const newToday = todayRegistrations.length;
 
   // Renewals today
-  const renewalsToday = todayRegistrations.filter(m => parseInt(m.amount.replace(/[^0-9]/g, '')) > 2000).length;
+  const RENEWAL_THRESHOLD = 2000;
+  const renewalsToday = todayRegistrations.filter(m => parseInt(m.amount.replace(/[^0-9]/g, '')) > RENEWAL_THRESHOLD).length;
 
   return (
     <div className="w-full pb-8">

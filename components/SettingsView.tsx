@@ -5,6 +5,7 @@ import { LayoutDashboard, CreditCard, MessageCircle, Clock, Fingerprint, Camera,
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '@/components/AuthContext';
 import { evaluatePasswordStrength, isPasswordValid, PASSWORD_MIN_LENGTH } from '@/lib/sanitize';
+import { useToast } from '@/components/Toast';
 
 interface SettingsViewProps {
   settings: any;
@@ -14,12 +15,13 @@ interface SettingsViewProps {
 
 export default function SettingsView({ settings, onSaveSettings, isLightMode }: SettingsViewProps) {
   const { changePassword } = useAuth();
+  const { showToast } = useToast();
   
   const [activeSettingsTab, setActiveSettingsTab] = useState('general');
-  const [gymName, setGymName] = useState(settings?.gymName || 'Corenix Club');
-  const [address, setAddress] = useState(settings?.address || '123 Fitness Avenue, Body-building District, NY');
-  const [phone, setPhone] = useState(settings?.phone || '+1 987 654 3210');
-  const [email, setEmail] = useState(settings?.email || 'contact@corenix.com');
+  const [gymName, setGymName] = useState(settings?.gymName || '');
+  const [address, setAddress] = useState(settings?.address || '');
+  const [phone, setPhone] = useState(settings?.phone || '');
+  const [email, setEmail] = useState(settings?.email || '');
   
   // Plans list
   const [plans, setPlans] = useState<any[]>(settings?.plans || [
@@ -75,7 +77,7 @@ export default function SettingsView({ settings, onSaveSettings, isLightMode }: 
       businessHours
     };
     await onSaveSettings(updatedSettings);
-    alert('Settings saved successfully to Firestore database!');
+    showToast('Settings saved successfully to Firestore database!', 'success');
   };
 
   const handlePlanPriceChange = (index: number, newPrice: string) => {

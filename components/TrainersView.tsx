@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, CheckCircle, Activity, IndianRupee, Award, Users, Clock, ArrowLeft, Edit, FileText, RefreshCw, X, Camera, Contact } from 'lucide-react';
 import { Trainer, Member } from '@/lib/db';
+import { useToast } from '@/components/Toast';
 
 interface TrainersViewProps {
   trainers: Trainer[];
@@ -30,12 +31,9 @@ export default function TrainersView({ trainers, members, onAddTrainer, isLightM
 
   // Calculate live stats
   const activeTrainersCount = trainers.filter(t => t.status === 'Active').length;
-  // Pt sessions/revenue can be derived or mock placeholders based on trainers count
-  const ptSessionsCount = trainers.reduce((sum, t) => sum + (t.membersCount * 12), 0);
-  const ptRevenueGenerated = trainers.reduce((sum, t) => {
-    const val = parseInt(t.salary.replace(/[^0-9]/g, '')) || 0;
-    return sum + (val * 2); // Assume double the salary as revenue for mock calculations
-  }, 0);
+  // Pt sessions/revenue can be derived or real data
+  const ptSessionsCount = "N/A";
+  const ptRevenueGenerated = "N/A";
 
   return (
     <div className="w-full flex flex-col min-h-full pb-8">
@@ -74,7 +72,7 @@ export default function TrainersView({ trainers, members, onAddTrainer, isLightM
                <div className="p-2 bg-primary/10 text-primary rounded-lg shrink-0"><IndianRupee size={20} /></div>
                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">PT Revenue</h3>
              </div>
-             <div className={`text-3xl font-heading font-black ${isLightMode ? 'text-black' : 'text-white'} pl-12 tracking-tight`}>₹ {(ptRevenueGenerated/100000).toFixed(1)}L</div>
+             <div className={`text-3xl font-heading font-black ${isLightMode ? 'text-black' : 'text-white'} pl-12 tracking-tight`}>{ptRevenueGenerated}</div>
           </div>
         )}
       </div>
@@ -233,25 +231,32 @@ function AddTrainerModal({ isOpen, onClose, onAdd }: any) {
   const [timing, setTiming] = useState('06:00 AM - 02:00 PM');
   const [bio, setBio] = useState('');
 
+  const { showToast } = useToast();
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
-    await onAdd({
-      name,
-      phone,
-      specialization,
-      experience: `${experience} Years`,
-      membersCount: 0,
-      status: 'Active',
-      salary: `₹${parseInt(salary).toLocaleString('en-IN')}`,
-      timing,
-      bio
-    });
-    setName('');
-    setPhone('');
-    setBio('');
-    onClose();
+    try {
+      await onAdd({
+        name,
+        phone,
+        specialization,
+        experience: `${experience} Years`,
+        membersCount: 0,
+        status: 'Active',
+        salary: `₹${parseInt(salary).toLocaleString('en-IN')}`,
+        timing,
+        bio
+      });
+      setName('');
+      setPhone('');
+      setBio('');
+      onClose();
+      showToast('Trainer added successfully', 'success');
+    } catch (err) {
+      showToast('Failed to add trainer', 'error');
+    }
   };
 
   return (

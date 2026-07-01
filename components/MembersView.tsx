@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Member, Trainer, RemovedMember } from '@/lib/db';
+import { useToast } from '@/components/Toast';
 
 interface MembersViewProps {
   members: Member[];
@@ -22,6 +23,7 @@ interface MembersViewProps {
 }
 
 export default function MembersView({ members, trainers, onAddMember, onUpdateMember, onDeleteMember, onRemoveMember, removedMembers, isLightMode, role, settings }: MembersViewProps) {
+  const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
   const [sort, setSort] = useState({ key: 'name', direction: 'asc' });
@@ -48,6 +50,7 @@ export default function MembersView({ members, trainers, onAddMember, onUpdateMe
           }
         }}
         isLightMode={isLightMode}
+        settings={settings}
       />
     );
   }
@@ -284,6 +287,7 @@ export default function MembersView({ members, trainers, onAddMember, onUpdateMe
         onAdd={onAddMember}
         trainers={trainers}
         isLightMode={isLightMode}
+        settings={settings}
       />
 
       {/* Removal Reason Modal */}
@@ -386,7 +390,7 @@ export default function MembersView({ members, trainers, onAddMember, onUpdateMe
                       : removeReason;
                     
                     if (!finalReason) {
-                      alert('Please provide a reason for removing this member.');
+                      showToast('Please provide a reason for removing this member.', 'error');
                       return;
                     }
                     
@@ -396,7 +400,7 @@ export default function MembersView({ members, trainers, onAddMember, onUpdateMe
                       setRemoveMember(null);
                       setRemoveReason('');
                     } catch (err) {
-                      alert('Failed to remove member. Please try again.');
+                      showToast('Failed to remove member. Please try again.', 'error');
                     } finally {
                       setRemoveLoading(false);
                     }
@@ -497,27 +501,36 @@ export default function MembersView({ members, trainers, onAddMember, onUpdateMe
   );
 }
 
-function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode }: any) {
+function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode, settings }: any) {
+  const { showToast } = useToast();
+  const defaultPlans = [
+    { name: 'Monthly', price: 999 },
+    { name: 'Quarterly', price: 2499 },
+    { name: 'Half-Yearly', price: 4499 },
+    { name: 'Annual', price: 7999 }
+  ];
+  const plans = settings?.plans || defaultPlans;
+
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [dob, setDob] = useState('');
   const [gender, setGender] = useState('Male');
-  const [planSelection, setPlanSelection] = useState('Monthly - ₹999');
+  const [planSelection, setPlanSelection] = useState(`${plans[0]?.name} - ₹${plans[0]?.price}`);
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [trainer, setTrainer] = useState('None');
   const [paymentMode, setPaymentMode] = useState('UPI');
-  const [amount, setAmount] = useState('999');
+  const [amount, setAmount] = useState(plans[0]?.price?.toString() || '999');
 
   if (!isOpen) return null;
 
   const handlePlanChange = (e: any) => {
     const val = e.target.value;
     setPlanSelection(val);
-    if (val.includes('Monthly')) setAmount('999');
-    else if (val.includes('Quarterly')) setAmount('2499');
-    else if (val.includes('Half-Yearly')) setAmount('4499');
-    else if (val.includes('Annual')) setAmount('7999');
+    const selectedPlan = plans.find((p: any) => val.startsWith(p.name));
+    if (selectedPlan) {
+      setAmount(selectedPlan.price.toString());
+    }
   };
 
   const calculateExpiryDate = (start: string, plan: string) => {
@@ -536,28 +549,32 @@ function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode }: any) 
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
-    const expiryDate = calculateExpiryDate(startDate, planSelection);
-    const planName = planSelection.split(' - ')[0];
-    await onAdd({
-      name,
-      phone,
-      email,
-      dob,
-      gender,
-      plan: planName,
-      amount: `₹${amount}`,
-      startDate,
-      expiryDate,
-      status: 'Active',
-      trainer,
-      paymentMode
-    });
-    // Reset states
-    setName('');
-    setPhone('');
-    setEmail('');
-    setDob('');
-    onClose();
+    try {
+      const expiryDate = calculateExpiryDate(startDate, planSelection);
+      const planName = planSelection.split(' - ')[0];
+      await onAdd({
+        name,
+        phone,
+        email,
+        dob,
+        gender,
+        plan: planName,
+        amount: `₹${amount}`,
+        startDate,
+        expiryDate,
+        status: 'Active',
+        trainer,
+        paymentMode
+      });
+      // Reset states
+      setName('');
+      setPhone('');
+      setEmail('');
+      setDob('');
+      onClose();
+    } catch (err) {
+      showToast('Error adding member', 'error');
+    }
   };
 
   return (
@@ -623,10 +640,9 @@ function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode }: any) 
                <div className="space-y-1.5">
                  <label className="text-xs font-semibold text-text-secondary uppercase">Membership Plan</label>
                  <select value={planSelection} onChange={handlePlanChange} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-text-secondary focus:border-primary/50 focus:outline-none">
-                   <option>Monthly - ₹999</option>
-                   <option>Quarterly - ₹2499</option>
-                   <option>Half-Yearly - ₹4499</option>
-                   <option>Annual - ₹7999</option>
+                   {plans.map((p: any) => (
+                     <option key={p.name} value={`${p.name} - ₹${p.price}`}>{p.name} - ₹{p.price}</option>
+                   ))}
                  </select>
                </div>
                <div className="space-y-1.5">
@@ -670,38 +686,51 @@ function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode }: any) 
   );
 }
 
-function MemberProfile({ member, onBack, onUpdate, isLightMode }: any) {
+function MemberProfile({ member, onBack, onUpdate, isLightMode, settings }: any) {
+  const { showToast } = useToast();
+  const defaultPlans = [
+    { name: 'Monthly', price: 999 },
+    { name: 'Quarterly', price: 2499 },
+    { name: 'Half-Yearly', price: 4499 },
+    { name: 'Annual', price: 7999 }
+  ];
+  const plans = settings?.plans || defaultPlans;
+
   const [isRenewOpen, setIsRenewOpen] = useState(false);
-  const [renewPlan, setRenewPlan] = useState('Monthly - ₹999');
-  const [renewAmount, setRenewAmount] = useState('999');
+  const [renewPlan, setRenewPlan] = useState(`${plans[0]?.name} - ₹${plans[0]?.price}`);
+  const [renewAmount, setRenewAmount] = useState(plans[0]?.price?.toString() || '999');
 
   const handleRenewPlanChange = (e: any) => {
     const val = e.target.value;
     setRenewPlan(val);
-    if (val.includes('Monthly')) setRenewAmount('999');
-    else if (val.includes('Quarterly')) setRenewAmount('2499');
-    else if (val.includes('Half-Yearly')) setRenewAmount('4499');
-    else if (val.includes('Annual')) setRenewAmount('7999');
+    const selectedPlan = plans.find((p: any) => val.startsWith(p.name));
+    if (selectedPlan) {
+      setRenewAmount(selectedPlan.price.toString());
+    }
   };
 
   const handleRenewSubmit = async (e: any) => {
     e.preventDefault();
-    const todayStr = new Date().toISOString().slice(0, 10);
-    // Expiry calculation
-    const date = new Date(todayStr);
-    if (renewPlan.includes('Monthly')) date.setMonth(date.getMonth() + 1);
-    else if (renewPlan.includes('Quarterly')) date.setMonth(date.getMonth() + 3);
-    else if (renewPlan.includes('Half-Yearly')) date.setMonth(date.getMonth() + 6);
-    else if (renewPlan.includes('Annual')) date.setFullYear(date.getFullYear() + 1);
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      // Expiry calculation
+      const date = new Date(todayStr);
+      if (renewPlan.includes('Monthly')) date.setMonth(date.getMonth() + 1);
+      else if (renewPlan.includes('Quarterly')) date.setMonth(date.getMonth() + 3);
+      else if (renewPlan.includes('Half-Yearly')) date.setMonth(date.getMonth() + 6);
+      else if (renewPlan.includes('Annual')) date.setFullYear(date.getFullYear() + 1);
 
-    await onUpdate({
-      plan: renewPlan.split(' - ')[0],
-      amount: `₹${renewAmount}`,
-      startDate: todayStr,
-      expiryDate: date.toISOString().slice(0, 10),
-      status: 'Active'
-    });
-    setIsRenewOpen(false);
+      await onUpdate({
+        plan: renewPlan.split(' - ')[0],
+        amount: `₹${renewAmount}`,
+        startDate: todayStr,
+        expiryDate: date.toISOString().slice(0, 10),
+        status: 'Active'
+      });
+      setIsRenewOpen(false);
+    } catch (err) {
+      showToast('Error renewing membership', 'error');
+    }
   };
 
   return (
@@ -813,10 +842,9 @@ function MemberProfile({ member, onBack, onUpdate, isLightMode }: any) {
                <div className="space-y-1.5">
                  <label className="text-xs font-semibold text-text-secondary uppercase">Plan Selection</label>
                  <select value={renewPlan} onChange={handleRenewPlanChange} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-text-secondary focus:border-primary/50 focus:outline-none">
-                   <option>Monthly - ₹999</option>
-                   <option>Quarterly - ₹2499</option>
-                   <option>Half-Yearly - ₹4499</option>
-                   <option>Annual - ₹7999</option>
+                   {plans.map((p: any) => (
+                     <option key={p.name} value={`${p.name} - ₹${p.price}`}>{p.name} - ₹{p.price}</option>
+                   ))}
                  </select>
                </div>
                <div className="space-y-1.5">

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, Gift, Star, Users, MessageCircle } from 'lucide-react';
 import { Offer } from '@/lib/db';
+import { useToast } from '@/components/Toast';
 
 interface OffersViewProps {
   offers: Offer[];
@@ -10,6 +11,7 @@ interface OffersViewProps {
 }
 
 export default function OffersView({ offers, onAddOffer, isLightMode, role }: OffersViewProps) {
+  const { showToast } = useToast();
   const [name, setName] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [discount, setDiscount] = useState('20');
@@ -18,15 +20,19 @@ export default function OffersView({ offers, onAddOffer, isLightMode, role }: Of
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
-    await onAddOffer({
-      name,
-      target,
-      date,
-      count: '0 claimed'
-    });
-    setName('');
-    setDescription('');
-    alert('Offer broadcast saved successfully to Firestore!');
+    try {
+      await onAddOffer({
+        name,
+        target,
+        date,
+        count: '0 claimed'
+      });
+      setName('');
+      setDescription('');
+      showToast('Offer broadcast saved successfully to Firestore!', 'success');
+    } catch (err) {
+      showToast('Failed to save offer broadcast', 'error');
+    }
   };
 
   const selectTemplate = (title: string, desc: string, discountVal: string, targetGroup: string) => {

@@ -818,53 +818,6 @@ export async function addTrainer(trainer: Trainer): Promise<Trainer> {
   }
 }
 
-export async function updateTrainerStatus(id: string, status: string): Promise<void> {
-  if (useFallback) {
-    const local = getLocal<Trainer[]>('trainers', []);
-    const updated = local.map((t: any) => t.id === id ? { ...t, status } : t);
-    saveLocal('trainers', updated);
-    return;
-  }
-  try {
-    const docRef = doc(db, 'trainers', id);
-    await updateDoc(docRef, { status });
-  } catch (error) {
-    setFallback();
-    await updateTrainerStatus(id, status);
-  }
-}
-
-export async function updateTrainer(id: string, data: Partial<Trainer>): Promise<void> {
-  if (useFallback) {
-    const local = getLocal<Trainer[]>('trainers', []);
-    const updated = local.map((t: any) => t.id === id ? { ...t, ...data } : t);
-    saveLocal('trainers', updated);
-    return;
-  }
-  try {
-    const docRef = doc(db, 'trainers', id);
-    await updateDoc(docRef, data as any);
-  } catch (error) {
-    setFallback();
-    await updateTrainer(id, data);
-  }
-}
-
-export async function deleteTrainer(id: string): Promise<void> {
-  if (useFallback) {
-    const local = getLocal<Trainer[]>('trainers', []);
-    const updated = local.filter((t: any) => t.id !== id);
-    saveLocal('trainers', updated);
-    return;
-  }
-  try {
-    await deleteDoc(doc(db, 'trainers', id));
-  } catch (error) {
-    setFallback();
-    await deleteTrainer(id);
-  }
-}
-
 // ─── Reviews ────────────────────────────────────────────────────────────────
 
 export async function getReviews(): Promise<Review[]> {

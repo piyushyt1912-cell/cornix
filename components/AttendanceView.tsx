@@ -22,8 +22,6 @@ interface AttendanceViewProps {
   trainers: Trainer[];
   attendance: AttendanceRecord[];
   onAttendanceUpdate: (records: AttendanceRecord[]) => void;
-  onUpdateStaffStatus: (id: string, status: string) => void;
-  onUpdateTrainerStatus: (id: string, status: string) => void;
   isLightMode: boolean;
   role: 'admin' | 'receptionist';
 }
@@ -38,8 +36,7 @@ const TABS: { id: TabType; label: string; icon: typeof Activity }[] = [
 ];
 
 export default function AttendanceView({ 
-  members, staff, trainers, attendance, onAttendanceUpdate, 
-  onUpdateStaffStatus, onUpdateTrainerStatus, isLightMode, role 
+  members, staff, trainers, attendance, onAttendanceUpdate, isLightMode, role 
 }: AttendanceViewProps) {
   const [tab, setTab] = useState<TabType>('live');
   const [search, setSearch] = useState('');
@@ -252,13 +249,6 @@ export default function AttendanceView({
       status: isLate ? 'Late' : 'Present',
     });
 
-    // Update the global state so it's marked as present "all over the application"
-    if (type === 'staff') {
-      onUpdateStaffStatus(person.id, isLate ? 'Late' : 'Present');
-    } else {
-      onUpdateTrainerStatus(person.id, isLate ? 'Late' : 'Present');
-    }
-
     // Refresh staff attendance
     const updated = await getStaffAttendanceByDate(dateStr);
     setStaffAttendance(updated);
@@ -287,14 +277,6 @@ export default function AttendanceView({
     }
     const updated = await getStaffAttendanceByDate(staffDate);
     setStaffAttendance(updated);
-    
-    // Update global application state
-    const isStaffMember = staff.some(s => s.id === staffId);
-    if (isStaffMember) {
-      onUpdateStaffStatus(staffId, 'On Leave');
-    } else {
-      onUpdateTrainerStatus(staffId, 'On Leave');
-    }
   };
 
   // History search

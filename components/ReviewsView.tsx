@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Star, Camera } from 'lucide-react';
 import { Review, Member } from '@/lib/db';
+import { useToast } from '@/components/Toast';
 
 interface ReviewsViewProps {
   reviews: Review[];
@@ -11,6 +12,7 @@ interface ReviewsViewProps {
 }
 
 export default function ReviewsView({ reviews, members, onAddReview, isLightMode, role }: ReviewsViewProps) {
+  const { showToast } = useToast();
   const [rating, setRating] = useState(5);
   const [selectedMemberName, setSelectedMemberName] = useState(members[0]?.name || '');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -25,15 +27,19 @@ export default function ReviewsView({ reviews, members, onAddReview, isLightMode
     e.preventDefault();
     if (!selectedMemberName) return;
 
-    await onAddReview({
-      name: selectedMemberName,
-      text,
-      r: rating,
-      date
-    });
-
-    setText('');
-    setRating(5);
+    try {
+      await onAddReview({
+        name: selectedMemberName,
+        text,
+        r: rating,
+        date
+      });
+      setText('');
+      setRating(5);
+      showToast('Review saved successfully!', 'success');
+    } catch (err) {
+      showToast('Failed to save review', 'error');
+    }
   };
 
   return (
@@ -128,7 +134,7 @@ export default function ReviewsView({ reviews, members, onAddReview, isLightMode
                      <button 
                         onClick={() => {
                           navigator.clipboard.writeText(`"${rev.text}" - ${rev.name} (${rev.r} Stars at Corenix Club)`);
-                          alert(`Copied review by ${rev.name} for Instagram!`);
+                          showToast(`Copied review by ${rev.name} for Instagram!`, 'success');
                         }}
                         className="text-xs font-semibold text-primary hover:text-white transition-colors flex items-center gap-1"
                      >

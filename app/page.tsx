@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { ToastContainer } from '@/components/Toast';
 import { 
   LayoutDashboard, Users, UserCheck, Contact, Dumbbell, 
   LineChart, TicketPercent, Ruler, Star, Settings,
@@ -39,7 +40,7 @@ import {
   getMembers, addMember, updateMember, deleteMember,
   getAttendance, markAttendance,
   getStaff, addStaff, updateStaff, deleteStaff, updateStaffStatus,
-  getTrainers, addTrainer, updateTrainerStatus, updateTrainer,
+  getTrainers, addTrainer,
   getReviews, addReview,
   getOffers, addOffer,
   getSettings, saveSettings,
@@ -200,16 +201,6 @@ export default function CorenixApp() {
     return saved;
   };
 
-  const handleUpdateTrainerStatus = async (id: string, status: string) => {
-    await updateTrainerStatus(id, status);
-    setTrainers(prev => prev.map(t => t.id === id ? { ...t, status } : t));
-  };
-
-  const handleUpdateTrainer = async (id: string, data: Partial<Trainer>) => {
-    await updateTrainer(id, data);
-    setTrainers(prev => prev.map(t => t.id === id ? { ...t, ...data } : t));
-  };
-
   const handleAddReview = async (reviewData: Review) => {
     const saved = await addReview(reviewData);
     setReviews(prev => [...prev, saved]);
@@ -309,7 +300,8 @@ export default function CorenixApp() {
   }
 
   return (
-    <div className={`flex min-h-screen overflow-hidden text-sm transition-colors duration-300 ${isLightMode ? 'bg-[#f0f2f5] text-gray-900' : 'bg-[#0D0D0D] text-white'}`}>
+    <ToastContainer isLightMode={isLightMode}>
+      <div className={`flex min-h-screen overflow-hidden text-sm transition-colors duration-300 ${isLightMode ? 'bg-[#f0f2f5] text-gray-900' : 'bg-[#0D0D0D] text-white'}`}>
       
       {/* Sidebar Overlay (Mobile) — shows when sidebar is OPEN on mobile */}
       {sidebarOpen && (
@@ -330,7 +322,7 @@ export default function CorenixApp() {
         <div className="flex px-6 py-[30px] items-center justify-between lg:justify-center border-b border-border-color shrink-0">
           {sidebarOpen ? (
             <h1 className="font-heading font-black text-[22px] tracking-[1px] text-primary uppercase flex items-center gap-2">
-              {settings.gymName}
+              {settings?.gymName || 'CORENIX'}
             </h1>
           ) : (
             <h1 className="font-heading font-black text-[22px] text-primary uppercase">C</h1>
@@ -384,7 +376,7 @@ export default function CorenixApp() {
                 type="text" 
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.target.value)}
-                placeholder={`Search across ${settings.gymName}...`} 
+                placeholder={`Search across ${settings?.gymName || 'the gym'}...`} 
                 className={`bg-transparent border-none text-[13px] ${isLightMode ? 'text-black placeholder:text-gray-400' : 'text-white placeholder:text-text-secondary'} focus:outline-none w-full ml-2`}
               />
             </div>
@@ -511,7 +503,7 @@ export default function CorenixApp() {
           >
             {activeTab === 'Dashboard' && <DashboardView members={members} attendance={attendanceRecords} staff={staff} trainers={trainers} staffAttendance={staffAttendance} isLightMode={isLightMode} role={role} />}
             {activeTab === 'Members' && <MembersView members={members} trainers={trainers} onAddMember={handleAddMember} onUpdateMember={handleUpdateMember} onDeleteMember={handleDeleteMember} onRemoveMember={handleRemoveMember} removedMembers={removedMembers} isLightMode={isLightMode} role={role} settings={settings} />}
-            {activeTab === 'Attendance' && <AttendanceView members={members} staff={staff} trainers={trainers} attendance={attendanceRecords} onAttendanceUpdate={setAttendanceRecords} onUpdateStaffStatus={handleUpdateStaffStatus} onUpdateTrainerStatus={handleUpdateTrainerStatus} isLightMode={isLightMode} role={role} />}
+            {activeTab === 'Attendance' && <AttendanceView members={members} staff={staff} trainers={trainers} attendance={attendanceRecords} onAttendanceUpdate={setAttendanceRecords} isLightMode={isLightMode} role={role} />}
             {activeTab === 'Staff' && role === 'admin' && <StaffView staff={staff} onAddStaff={handleAddStaff} onUpdateStaff={handleUpdateStaff} onDeleteStaff={handleDeleteStaff} onUpdateStaffStatus={handleUpdateStaffStatus} isLightMode={isLightMode} role={role} />}
             {activeTab === 'Trainers' && <TrainersView trainers={trainers} members={members} onAddTrainer={handleAddTrainer} isLightMode={isLightMode} role={role} />}
             {activeTab === 'Reports' && role === 'admin' && <ReportsView members={members} attendance={attendanceRecords} isLightMode={isLightMode} />}
@@ -524,10 +516,11 @@ export default function CorenixApp() {
 
         {/* Footer */}
         <footer className={`h-10 text-center flex items-center justify-center ${isLightMode ? 'bg-white border-gray-200' : 'bg-surface border-border-color'} border-t text-[11px] text-text-secondary tracking-[1px] uppercase shrink-0`}>
-          {settings.gymName} Software | Powered by Fit United
+          {settings?.gymName || 'CORENIX'} Software | Powered by Fit United
         </footer>
 
       </main>
     </div>
+    </ToastContainer>
   );
 }

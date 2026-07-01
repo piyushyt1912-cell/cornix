@@ -29,19 +29,13 @@ export default function ReportsView({ members, attendance, isLightMode }: Report
       {/* Export Top bar */}
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-surface border border-border-color p-4 rounded-xl mb-6 shadow-sm">
          <div className="flex items-center gap-3">
-           {tab === 'monthly' && <input type="month" className="bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none [color-scheme:dark]" defaultValue="2026-05" />}
+           {tab === 'monthly' && <input type="month" className="bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none [color-scheme:dark]" defaultValue={new Date().toISOString().slice(0, 7)} />}
            {tab === 'daily' && <input type="date" className="bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none [color-scheme:dark]" defaultValue={new Date().toISOString().slice(0, 10)} />}
            {tab === 'attendance' && <input type="month" value={attendanceMonth} onChange={e => setAttendanceMonth(e.target.value)} className="bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none [color-scheme:dark]" />}
          </div>
          <div className="flex gap-2">
             <button onClick={() => window.print()} className="flex items-center justify-center gap-2 bg-[#0D0D0D] hover:bg-[#1a1a1a] border border-border-color text-text-secondary hover:text-white px-3 py-2 rounded-md text-sm font-semibold transition-colors">
               <Printer size={16} /> Print
-            </button>
-            <button onClick={() => alert('PDF generation is simulated.')} className="flex items-center justify-center gap-2 bg-[#0D0D0D] hover:bg-[#1a1a1a] border border-border-color text-red-400 hover:text-red-300 px-3 py-2 rounded-md text-sm font-semibold transition-colors">
-              <FileText size={16} /> Export PDF
-            </button>
-            <button onClick={() => alert('Excel export is simulated.')} className="flex items-center justify-center gap-2 bg-[#0D0D0D] hover:bg-[#1a1a1a] border border-border-color text-emerald-400 hover:text-emerald-300 px-3 py-2 rounded-md text-sm font-semibold transition-colors">
-              <FileSpreadsheet size={16} /> Export Excel
             </button>
          </div>
       </div>
@@ -55,6 +49,8 @@ export default function ReportsView({ members, attendance, isLightMode }: Report
 }
 
 function MonthlyReportTab({ members, isLightMode }: { members: Member[]; isLightMode: boolean }) {
+  const currentMonthStr = new Date().toISOString().slice(0, 7);
+  const currentMonthNum = currentMonthStr.slice(5, 7);
   // Aggregate sales
   const totalSales = members.reduce((sum, m) => sum + (parseInt(m.amount.replace(/[^0-9]/g, '')) || 0), 0);
   const cashSales = members
@@ -74,7 +70,7 @@ function MonthlyReportTab({ members, isLightMode }: { members: Member[]; isLight
   });
 
   const barData = {
-    labels: Array.from({ length: 30 }, (_, i) => `${i + 1} May`),
+    labels: Array.from({ length: 30 }, (_, i) => `Day ${i + 1}`),
     datasets: [
       {
         label: 'Revenue (₹)',
@@ -82,9 +78,9 @@ function MonthlyReportTab({ members, isLightMode }: { members: Member[]; isLight
           // Compute dynamic daily revenue based on start dates
           const day = String(i + 1).padStart(2, '0');
           const daySales = members
-            .filter(m => m.startDate.endsWith(`-05-${day}`) || m.startDate.includes(`-05-${day}`))
+            .filter(m => m.startDate.endsWith(`-${currentMonthNum}-${day}`) || m.startDate.includes(`-${currentMonthNum}-${day}`))
             .reduce((sum, m) => sum + (parseInt(m.amount.replace(/[^0-9]/g, '')) || 0), 0);
-          return daySales || (1000 + (i * 300) % 2000); // fallback mock variant if no start matches
+          return daySales || 0; // fallback mock variant if no start matches
         }),
         backgroundColor: 'rgba(255, 51, 51, 0.8)',
         borderRadius: 4,
@@ -149,7 +145,7 @@ function MonthlyReportTab({ members, isLightMode }: { members: Member[]; isLight
         </div>
         <div className="bg-surface border border-border-color p-4 rounded-xl">
           <div className="text-[11px] text-text-secondary uppercase font-semibold mb-1">Renewals</div>
-          <div className={`font-heading text-xl font-bold ${isLightMode ? 'text-black' : 'text-white'} tracking-tight`}>{members.filter(m => m.status === 'Active' && m.startDate.includes('2026-05')).length}</div>
+          <div className={`font-heading text-xl font-bold ${isLightMode ? 'text-black' : 'text-white'} tracking-tight`}>{members.filter(m => m.status === 'Active' && m.startDate.includes(currentMonthStr)).length}</div>
         </div>
         <div className="bg-surface border border-border-color p-4 rounded-xl">
           <div className="text-[11px] text-text-secondary uppercase font-semibold mb-1">Total Active</div>

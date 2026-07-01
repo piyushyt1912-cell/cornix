@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, ChevronDown, MessageCircle, AlertTriangle } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
 import { Member, Measurement, getMeasurements, addMeasurement } from '@/lib/db';
+import { useToast } from '@/components/Toast';
 
 interface MeasurementsViewProps {
   members: Member[];
@@ -15,12 +16,14 @@ export default function MeasurementsView({ members, isLightMode }: MeasurementsV
 
   // Form states
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [weight, setWeight] = useState('79');
-  const [height, setHeight] = useState('178');
-  const [bodyFat, setBodyFat] = useState('18.5');
-  const [chest, setChest] = useState('42');
-  const [waist, setWaist] = useState('34');
-  const [arms, setArms] = useState('15.5');
+  const [weight, setWeight] = useState('');
+  const [height, setHeight] = useState('');
+  const [bodyFat, setBodyFat] = useState('');
+  const [chest, setChest] = useState('');
+  const [waist, setWaist] = useState('');
+  const [arms, setArms] = useState('');
+
+  const { showToast } = useToast();
 
   const selectedMember = members.find(m => m.phone === selectedPhone);
 
@@ -71,7 +74,7 @@ export default function MeasurementsView({ members, isLightMode }: MeasurementsV
     try {
       const saved = await addMeasurement(data);
       setMeasurements([...measurements, saved].sort((a, b) => a.date.localeCompare(b.date)));
-      alert('Measurements saved successfully to Firestore!');
+      showToast('Measurements saved successfully to Firestore!', 'success');
     } catch (err) {
       console.error(err);
     }

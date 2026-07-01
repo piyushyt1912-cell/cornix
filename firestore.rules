@@ -56,7 +56,7 @@ service cloud.firestore {
     match /members/{memberId} {
       allow read: if isStaff();
       allow create: if isStaff() && isValidMemberData();
-      allow update: if isStaff();
+      allow update: if isStaff() && isValidMemberData();
       allow delete: if isAdmin();
     }
 
@@ -84,9 +84,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Reviews — all staff can read and write
+    // Reviews — staff can read/create/update, only admin can delete
     match /reviews/{reviewId} {
-      allow read, write: if isStaff();
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
     }
 
     // Offers — all staff can read, only admin can write
@@ -95,9 +97,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Measurements — all staff can read and write
+    // Measurements — staff can read/create/update, only admin can delete
     match /measurements/{measurementId} {
-      allow read, write: if isStaff();
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isAdmin();
     }
 
     // Settings — all staff can read, only admin can write
@@ -112,10 +116,10 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Staff Attendance — staff can read and create (for auto-absence), admin can update/delete
+    // Staff Attendance — staff can read, only admin can create/update/delete
     match /staff_attendance/{recordId} {
       allow read: if isStaff();
-      allow create: if isStaff();
+      allow create: if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }

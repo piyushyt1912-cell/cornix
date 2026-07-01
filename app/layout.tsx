@@ -13,6 +13,11 @@ const barlow = Barlow({
 export const metadata: Metadata = {
   title: 'Corenix Club Software',
   description: 'Gym management web application for internal staff use.',
+  robots: 'noindex, nofollow',
+};
+
+export const viewport: import('next').Viewport = {
+  themeColor: '#0D0D0D',
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
