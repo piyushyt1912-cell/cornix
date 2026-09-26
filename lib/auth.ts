@@ -219,18 +219,32 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
 /**
  * Get user role from Firestore users collection.
+ * If no user document exists, creates one (bootstrap).
  * Falls back to email-based role detection if Firestore is unavailable.
  */
 export async function getUserRole(uid: string, email?: string): Promise<UserRole> {
   try {
-    const roleFromFirestore = getDoc(doc(db, 'users', uid)).then(snap => {
-      if (snap.exists()) {
-        return (snap.data().role as UserRole) || inferRoleFromEmail(email);
-      }
-      return inferRoleFromEmail(email);
-    });
-    // Timeout after 3 seconds — Firestore may be unavailable
-    return await withTimeout(roleFromFirestore, 3000, inferRoleFromEmail(email));
+    const userDocRef = doc(db, 'users', uid);
+    const snap = await withTimeout(getDoc(userDocRef), 3000, null);
+    
+    if (snap && snap.exists()) {
+      return (snap.data().role as UserRole) || inferRoleFromEmail(email);
+    }
+    
+    // User document doesn't exist — bootstrap: create it now
+    const inferredRole = inferRoleFromEmail(email);
+    try {
+      await setDoc(userDocRef, {
+        email: email || '',
+        role: inferredRole,
+        createdAt: new Date().toISOString()
+      });
+      console.log(`Created user document for ${email} with role: ${inferredRole}`);
+    } catch (createError) {
+      console.warn('Could not create user document:', createError);
+    }
+    
+    return inferredRole;
   } catch (error) {
     console.warn('Could not fetch user role from Firestore, inferring from email.', error);
     return inferRoleFromEmail(email);

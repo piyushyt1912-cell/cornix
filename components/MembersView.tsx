@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Search, Plus, Eye, Edit, Printer, MessageCircle, Trash2, 
   ChevronUp, ChevronDown, ArrowLeft, Calendar, Contact, FileText, 
   RefreshCw, Camera, Fingerprint, X, UserPlus, AlertTriangle, CheckCircle2, Clock,
-  Archive, RotateCcw, UserX
+  Archive, RotateCcw, UserX, Send, Download, History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Member, Trainer, RemovedMember } from '@/lib/db';
+import { Member, Trainer, RemovedMember, Receipt, addReceipt, getReceiptsByMember } from '@/lib/db';
 import { useToast } from '@/components/Toast';
 
 interface MembersViewProps {
@@ -45,10 +45,11 @@ export default function MembersView({ members, trainers, onAddMember, onUpdateMe
         onBack={() => setSelectedMember(null)} 
         onUpdate={async (updatedData: any) => {
           if (selectedMember.id) {
-            const updated = await onUpdateMember(selectedMember.id, updatedData);
+            await onUpdateMember(selectedMember.id, updatedData);
             setSelectedMember({ ...selectedMember, ...updatedData });
           }
         }}
+        trainers={trainers}
         isLightMode={isLightMode}
         settings={settings}
       />
@@ -153,7 +154,16 @@ export default function MembersView({ members, trainers, onAddMember, onUpdateMe
                     <td className="px-5 py-3 text-text-secondary">{m.plan}</td>
                     <td className="px-5 py-3 text-text-secondary">{m.startDate}</td>
                     <td className="px-5 py-3 text-text-secondary">{m.expiryDate}</td>
-                    <td className="px-5 py-3 text-text-secondary">{m.amount}</td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-text-secondary">{m.amount}</span>
+                        {(m.dueAmount ?? 0) > 0 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-orange-500/15 text-orange-500 tracking-wide">
+                            Due ₹{m.dueAmount}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-5 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-1 rounded-[4px] text-[10px] font-bold uppercase tracking-wider ${
                         m.status === 'Active' ? 'bg-green-500/10 text-green-500' :
@@ -288,6 +298,7 @@ export default function MembersView({ members, trainers, onAddMember, onUpdateMe
         trainers={trainers}
         isLightMode={isLightMode}
         settings={settings}
+        onShowReceipt={(m: Member) => setReceiptMember(m)}
       />
 
       {/* Removal Reason Modal */}
@@ -423,85 +434,39 @@ export default function MembersView({ members, trainers, onAddMember, onUpdateMe
 
       {/* Receipt Modal */}
       {receiptMember && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white text-black w-full max-w-md rounded-lg shadow-2xl overflow-hidden print:w-full print:max-w-none print:shadow-none print:bg-white print:m-0">
-            <div className="p-6">
-               <div className="text-center mb-6">
-                 <h2 className="font-heading font-black text-2xl uppercase text-[#0D0D0D]">{settings?.gymName || 'Corenix Club'}</h2>
-                 <p className="text-sm text-gray-500">{settings?.address || '123 Fitness Avenue, Body-building District, NY'}</p>
-                 <p className="text-sm text-gray-500">{settings?.phone || '+1 987 654 3210'} • {settings?.email || 'contact@corenix.com'}</p>
-               </div>
-               
-               <div className="border-b-2 border-dashed border-gray-300 pb-4 mb-4">
-                 <div className="flex justify-between text-sm mb-1">
-                   <span className="font-semibold">Receipt No:</span>
-                   <span>#CRX-{receiptMember.id ? receiptMember.id.slice(-4).toUpperCase() : '8492'}</span>
-                 </div>
-                 <div className="flex justify-between text-sm mb-1">
-                   <span className="font-semibold">Date:</span>
-                   <span>{new Date().toLocaleDateString('en-US')}</span>
-                 </div>
-                 <div className="flex justify-between text-sm">
-                   <span className="font-semibold">Member ID:</span>
-                   <span>{receiptMember.id ? receiptMember.id.slice(-6).toUpperCase() : 'TEMP'}</span>
-                 </div>
-               </div>
-
-               <div className="mb-6 space-y-2 text-sm">
-                 <div className="flex justify-between">
-                   <span className="font-semibold">Name:</span>
-                   <span>{receiptMember.name}</span>
-                 </div>
-                 <div className="flex justify-between">
-                   <span className="font-semibold">Phone:</span>
-                   <span>+{receiptMember.phone}</span>
-                 </div>
-                 <div className="flex justify-between">
-                   <span className="font-semibold">Plan Details:</span>
-                   <span>{receiptMember.plan}</span>
-                 </div>
-                 <div className="flex justify-between">
-                   <span className="font-semibold">Validity:</span>
-                   <span>{receiptMember.startDate} to {receiptMember.expiryDate}</span>
-                 </div>
-                 <div className="flex justify-between">
-                   <span className="font-semibold">Payment Mode:</span>
-                   <span>{receiptMember.paymentMode || 'UPI'}</span>
-                 </div>
-               </div>
-
-               <div className="border-t-2 border-black pt-2 mb-6">
-                 <div className="flex justify-between items-center">
-                   <span className="font-bold text-lg uppercase">Total Paid</span>
-                   <span className="font-bold text-xl">{receiptMember.amount}</span>
-                 </div>
-               </div>
-
-               <div className="text-center text-xs text-gray-500 mt-8 italic">
-                 &quot;Thank you for choosing Corenix Club. Let&apos;s get fit together!&quot;<br/>
-                 Keep this receipt for your records. (No refunds)
-               </div>
-            </div>
-            
-            <div className="bg-gray-100 p-4 flex justify-end gap-3 print:hidden">
-              <button onClick={() => setReceiptMember(null)} className="px-4 py-2 text-sm font-bold text-gray-600 hover:text-black transition-colors">Cancel</button>
-              <button 
-                onClick={() => {
-                  window.print();
-                  setTimeout(() => setReceiptMember(null), 1000); 
-                }} 
-                className="px-4 py-2 text-sm bg-[#0D0D0D] text-white font-bold rounded shadow-lg hover:bg-black transition-colors flex items-center gap-2">
-                <Printer size={16} /> Print Receipt
-              </button>
-            </div>
-          </div>
-        </div>
+        <ReceiptModal 
+          member={receiptMember} 
+          settings={settings} 
+          onClose={() => setReceiptMember(null)} 
+        />
       )}
     </div>
   );
 }
 
-function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode, settings }: any) {
+function calculateDynamicExpiryDate(startDateStr: string, planNameStr: string, allPlans: any[]) {
+  const date = new Date(startDateStr);
+  const planName = planNameStr.split(' - ')[0];
+  const selectedPlan = allPlans.find((p: any) => p.name === planName);
+  const durationStr = (selectedPlan?.dur || planName).toLowerCase();
+  
+  if (durationStr.includes('month')) {
+    const match = durationStr.match(/(\d+)\s*month/);
+    const months = match ? parseInt(match[1]) : 1;
+    date.setMonth(date.getMonth() + months);
+  } else if (durationStr.includes('quarterly')) {
+    date.setMonth(date.getMonth() + 3);
+  } else if (durationStr.includes('half-yearly') || durationStr.includes('half yearly')) {
+    date.setMonth(date.getMonth() + 6);
+  } else if (durationStr.includes('annual') || durationStr.includes('year')) {
+    const match = durationStr.match(/(\d+)\s*year/);
+    const years = match ? parseInt(match[1]) : 1;
+    date.setFullYear(date.getFullYear() + years);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode, settings, onShowReceipt }: any) {
   const { showToast } = useToast();
   const defaultPlans = [
     { name: 'Monthly', price: 999 },
@@ -520,39 +485,50 @@ function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode, setting
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [trainer, setTrainer] = useState('None');
   const [paymentMode, setPaymentMode] = useState('UPI');
+  const [planPrice, setPlanPrice] = useState(Number(plans[0]?.price) || 999);
   const [amount, setAmount] = useState(plans[0]?.price?.toString() || '999');
+
+  // Custom plan state
+  const [isCustomPlan, setIsCustomPlan] = useState(false);
+  const [customPlanName, setCustomPlanName] = useState('');
+  const [customDays, setCustomDays] = useState(30);
+
+  const dueAmount = Math.max(0, planPrice - (Number(amount) || 0));
 
   if (!isOpen) return null;
 
   const handlePlanChange = (e: any) => {
     const val = e.target.value;
     setPlanSelection(val);
-    const selectedPlan = plans.find((p: any) => val.startsWith(p.name));
-    if (selectedPlan) {
-      setAmount(selectedPlan.price.toString());
+    if (val === '__custom__') {
+      setIsCustomPlan(true);
+      setPlanPrice(0);
+      setAmount('0');
+      setCustomPlanName('');
+      setCustomDays(30);
+    } else {
+      setIsCustomPlan(false);
+      const selectedPlan = plans.find((p: any) => val.startsWith(p.name));
+      if (selectedPlan) {
+        const price = Number(selectedPlan.price);
+        setPlanPrice(price);
+        setAmount(selectedPlan.price.toString());
+      }
     }
   };
 
   const calculateExpiryDate = (start: string, plan: string) => {
-    const date = new Date(start);
-    if (plan.includes('Monthly')) {
-      date.setMonth(date.getMonth() + 1);
-    } else if (plan.includes('Quarterly')) {
-      date.setMonth(date.getMonth() + 3);
-    } else if (plan.includes('Half-Yearly')) {
-      date.setMonth(date.getMonth() + 6);
-    } else if (plan.includes('Annual')) {
-      date.setFullYear(date.getFullYear() + 1);
-    }
-    return date.toISOString().slice(0, 10);
+    return calculateDynamicExpiryDate(start, plan, plans);
   };
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     try {
-      const expiryDate = calculateExpiryDate(startDate, planSelection);
-      const planName = planSelection.split(' - ')[0];
-      await onAdd({
+      const planName = isCustomPlan ? (customPlanName || 'Custom') : planSelection.split(' - ')[0];
+      const expiryDate = isCustomPlan
+        ? (() => { const d = new Date(startDate); d.setDate(d.getDate() + customDays); return d.toISOString().slice(0, 10); })()
+        : calculateExpiryDate(startDate, planSelection);
+      const saved = await onAdd({
         name,
         phone,
         email,
@@ -564,7 +540,10 @@ function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode, setting
         expiryDate,
         status: 'Active',
         trainer,
-        paymentMode
+        paymentMode,
+        totalAmount: planPrice,
+        paidAmount: Number(amount) || 0,
+        dueAmount: dueAmount
       });
       // Reset states
       setName('');
@@ -572,6 +551,10 @@ function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode, setting
       setEmail('');
       setDob('');
       onClose();
+      // Auto-show receipt after registration
+      if (saved && onShowReceipt) {
+        onShowReceipt(saved);
+      }
     } catch (err) {
       showToast('Error adding member', 'error');
     }
@@ -643,8 +626,23 @@ function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode, setting
                    {plans.map((p: any) => (
                      <option key={p.name} value={`${p.name} - ₹${p.price}`}>{p.name} - ₹{p.price}</option>
                    ))}
+                   <option value="__custom__">✏️ Custom Plan</option>
                  </select>
                </div>
+
+               {/* Custom Plan Fields */}
+               {isCustomPlan && (
+                 <>
+                   <div className="space-y-1.5">
+                     <label className="text-xs font-semibold text-text-secondary uppercase">Custom Plan Name</label>
+                     <input type="text" value={customPlanName} onChange={e => setCustomPlanName(e.target.value)} className="w-full bg-[#0D0D0D] border border-primary/30 rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none" placeholder="e.g. Special Offer" required />
+                   </div>
+                   <div className="space-y-1.5">
+                     <label className="text-xs font-semibold text-text-secondary uppercase">Duration (Days)</label>
+                     <input type="number" min="1" value={customDays} onChange={e => setCustomDays(Number(e.target.value) || 1)} className="w-full bg-[#0D0D0D] border border-primary/30 rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none" />
+                   </div>
+                 </>
+               )}
                <div className="space-y-1.5">
                  <label className="text-xs font-semibold text-text-secondary uppercase">Start Date</label>
                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none [color-scheme:dark]" />
@@ -659,21 +657,39 @@ function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode, setting
                  </select>
                </div>
                <div className="space-y-1.5">
-                 <label className="text-xs font-semibold text-text-secondary uppercase">Payment Mode</label>
-                 <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-text-secondary focus:border-primary/50 focus:outline-none">
-                   <option>UPI</option>
-                   <option>Cash</option>
-                   <option>Card</option>
-                 </select>
-               </div>
-               <div className="space-y-1.5">
-                 <label className="text-xs font-semibold text-text-secondary uppercase">Amount Paid</label>
-                 <div className="relative">
-                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-sm">₹</span>
-                   <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md pl-7 pr-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none" placeholder="0" />
-                 </div>
-               </div>
-             </div>
+                  <label className="text-xs font-semibold text-text-secondary uppercase">Payment Mode</label>
+                  <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-text-secondary focus:border-primary/50 focus:outline-none">
+                    <option>UPI</option>
+                    <option>Cash</option>
+                    <option>Card</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-text-secondary uppercase">Total Plan Price</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-sm">₹</span>
+                    <input type="number" value={planPrice} onChange={e => { if (isCustomPlan) { const v = Number(e.target.value) || 0; setPlanPrice(v); setAmount(e.target.value); } }} readOnly={!isCustomPlan} className={`w-full ${isCustomPlan ? 'bg-[#0D0D0D] border-primary/30 text-white' : 'bg-[#0D0D0D]/50 border-border-color text-text-secondary cursor-not-allowed'} border rounded-md pl-7 pr-3 py-2 text-sm focus:outline-none`} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-text-secondary uppercase">Amount Paid</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-sm">₹</span>
+                    <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md pl-7 pr-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none" placeholder="0" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Due Amount Alert */}
+              {dueAmount > 0 && (
+                <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg px-4 py-3 flex items-center gap-3">
+                  <AlertTriangle size={18} className="text-orange-500 shrink-0" />
+                  <div>
+                    <p className="text-orange-500 text-sm font-semibold">Partial Payment — ₹{dueAmount} Due</p>
+                    <p className="text-orange-400/70 text-xs mt-0.5">Member is paying ₹{amount || 0} out of ₹{planPrice}. Remaining ₹{dueAmount} will be tracked.</p>
+                  </div>
+                </div>
+              )}
           </form>
         </div>
 
@@ -686,7 +702,7 @@ function AddMemberModal({ isOpen, onClose, onAdd, trainers, isLightMode, setting
   );
 }
 
-function MemberProfile({ member, onBack, onUpdate, isLightMode, settings }: any) {
+function MemberProfile({ member, onBack, onUpdate, trainers, isLightMode, settings }: any) {
   const { showToast } = useToast();
   const defaultPlans = [
     { name: 'Monthly', price: 999 },
@@ -699,6 +715,62 @@ function MemberProfile({ member, onBack, onUpdate, isLightMode, settings }: any)
   const [isRenewOpen, setIsRenewOpen] = useState(false);
   const [renewPlan, setRenewPlan] = useState(`${plans[0]?.name} - ₹${plans[0]?.price}`);
   const [renewAmount, setRenewAmount] = useState(plans[0]?.price?.toString() || '999');
+  
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [loadingReceipts, setLoadingReceipts] = useState(false);
+  const [viewReceipt, setViewReceipt] = useState<Receipt | null>(null);
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMode, setPaymentMode] = useState('UPI');
+
+  // Edit member state
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editName, setEditName] = useState(member.name);
+  const [editPhone, setEditPhone] = useState(member.phone);
+  const [editEmail, setEditEmail] = useState(member.email || '');
+  const [editDob, setEditDob] = useState(member.dob || '');
+  const [editGender, setEditGender] = useState(member.gender || 'Male');
+  const [editTrainer, setEditTrainer] = useState(member.trainer || 'None');
+  const [editStatus, setEditStatus] = useState(member.status || 'Active');
+  const [editPlan, setEditPlan] = useState(member.plan || '');
+  const [editStartDate, setEditStartDate] = useState(member.startDate || '');
+  const [editExpiryDate, setEditExpiryDate] = useState(member.expiryDate || '');
+  const [editAmount, setEditAmount] = useState(member.amount || '');
+  const [editPaymentMode, setEditPaymentMode] = useState(member.paymentMode || 'UPI');
+  const [editSaving, setEditSaving] = useState(false);
+
+  useEffect(() => {
+    if (member?.id) {
+      setLoadingReceipts(true);
+      getReceiptsByMember(member.id)
+        .then(data => setReceipts(data.sort((a, b) => b.timestamp - a.timestamp)))
+        .finally(() => setLoadingReceipts(false));
+    }
+  }, [member?.id]);
+
+  const currentDue = member.dueAmount ?? 0;
+  const currentTotal = member.totalAmount ?? 0;
+  const currentPaid = member.paidAmount ?? 0;
+  const paymentPercent = currentTotal > 0 ? Math.min(100, Math.round((currentPaid / currentTotal) * 100)) : 100;
+
+  const handleRecordPayment = async () => {
+    const payAmt = Number(paymentAmount);
+    if (!payAmt || payAmt <= 0) return;
+    try {
+      const newPaid = currentPaid + payAmt;
+      const newDue = Math.max(0, currentTotal - newPaid);
+      await onUpdate({
+        paidAmount: newPaid,
+        dueAmount: newDue,
+        amount: `₹${newPaid}`
+      });
+      setIsPaymentOpen(false);
+      setPaymentAmount('');
+      showToast(`₹${payAmt} payment recorded successfully!`, 'success');
+    } catch (err) {
+      showToast('Error recording payment', 'error');
+    }
+  };
 
   const handleRenewPlanChange = (e: any) => {
     const val = e.target.value;
@@ -714,17 +786,13 @@ function MemberProfile({ member, onBack, onUpdate, isLightMode, settings }: any)
     try {
       const todayStr = new Date().toISOString().slice(0, 10);
       // Expiry calculation
-      const date = new Date(todayStr);
-      if (renewPlan.includes('Monthly')) date.setMonth(date.getMonth() + 1);
-      else if (renewPlan.includes('Quarterly')) date.setMonth(date.getMonth() + 3);
-      else if (renewPlan.includes('Half-Yearly')) date.setMonth(date.getMonth() + 6);
-      else if (renewPlan.includes('Annual')) date.setFullYear(date.getFullYear() + 1);
+      const expiryDate = calculateDynamicExpiryDate(todayStr, renewPlan, plans);
 
       await onUpdate({
         plan: renewPlan.split(' - ')[0],
         amount: `₹${renewAmount}`,
         startDate: todayStr,
-        expiryDate: date.toISOString().slice(0, 10),
+        expiryDate: expiryDate,
         status: 'Active'
       });
       setIsRenewOpen(false);
@@ -751,7 +819,7 @@ function MemberProfile({ member, onBack, onUpdate, isLightMode, settings }: any)
                <span className="flex items-center gap-1.5"><Contact size={14}/> {member.phone}</span>
                <span className="flex items-center gap-1.5"><Calendar size={14}/> Joined {member.startDate}</span>
              </div>
-             <div className="mt-3 flex items-center gap-2">
+             <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className={`px-2 py-0.5 rounded-[4px] text-[11px] font-bold uppercase tracking-wider ${
                     member.status === 'Active' ? 'bg-green-500/10 text-green-500' : 
                     member.status === 'Expired' ? 'bg-red-500/10 text-primary' : 
@@ -762,11 +830,33 @@ function MemberProfile({ member, onBack, onUpdate, isLightMode, settings }: any)
                 <span className="text-xs bg-[#0D0D0D] border border-border-color px-2 py-1 rounded text-white font-medium">
                   {member.plan} Plan
                 </span>
+                {currentDue > 0 && (
+                  <span className="px-2 py-0.5 rounded-[4px] text-[11px] font-bold uppercase tracking-wider bg-orange-500/15 text-orange-500 flex items-center gap-1">
+                    <AlertTriangle size={11} /> ₹{currentDue} Due
+                  </span>
+                )}
              </div>
            </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <button onClick={() => {
+            setEditName(member.name);
+            setEditPhone(member.phone);
+            setEditEmail(member.email || '');
+            setEditDob(member.dob || '');
+            setEditGender(member.gender || 'Male');
+            setEditTrainer(member.trainer || 'None');
+            setEditStatus(member.status || 'Active');
+            setEditPlan(member.plan || '');
+            setEditStartDate(member.startDate || '');
+            setEditExpiryDate(member.expiryDate || '');
+            setEditAmount(member.amount || '');
+            setEditPaymentMode(member.paymentMode || 'UPI');
+            setIsEditOpen(true);
+          }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-surface border border-border-color hover:bg-[#0D0D0D] text-white px-4 py-2 rounded-md text-sm font-semibold transition-colors">
+            <Edit size={16} /> Edit Details
+          </button>
           <button onClick={() => setIsRenewOpen(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md text-sm font-semibold transition-colors">
             <RefreshCw size={16} /> Renew / Upgrade
           </button>
@@ -823,8 +913,342 @@ function MemberProfile({ member, onBack, onUpdate, isLightMode, settings }: any)
                 </tbody>
               </table>
            </div>
+
+            {/* Receipt History */}
+            <div className={`bg-surface border ${isLightMode ? 'border-gray-200' : 'border-border-color'} rounded-xl overflow-hidden mt-6`}>
+              <div className="px-5 py-4 border-b border-border-color flex justify-between items-center bg-[#0D0D0D]/30">
+                 <h3 className="font-heading font-semibold text-[14px] text-text-secondary uppercase tracking-tight flex items-center gap-2">
+                   <History size={16} /> Receipt History
+                 </h3>
+              </div>
+              <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                   <thead className="bg-[#0D0D0D] border-b border-border-color text-text-secondary text-[11px] uppercase tracking-wider sticky top-0">
+                     <tr>
+                       <th className="px-5 py-3 font-medium">Receipt No</th>
+                       <th className="px-5 py-3 font-medium">Date</th>
+                       <th className="px-5 py-3 font-medium">Plan</th>
+                       <th className="px-5 py-3 font-medium">Amount</th>
+                       <th className="px-5 py-3 font-medium text-right">Actions</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-border-color">
+                     {loadingReceipts ? (
+                       <tr><td colSpan={5} className="px-5 py-4 text-center text-text-secondary text-xs">Loading receipts...</td></tr>
+                     ) : receipts.length === 0 ? (
+                       <tr><td colSpan={5} className="px-5 py-4 text-center text-text-secondary text-xs">No receipts found for this member.</td></tr>
+                     ) : (
+                       receipts.map((r) => (
+                         <tr key={r.id} className="hover:bg-[#0D0D0D]/50 transition-colors">
+                           <td className="px-5 py-3 font-mono text-xs">{r.receiptNo}</td>
+                           <td className="px-5 py-3 text-text-secondary text-xs">{new Date(r.timestamp).toLocaleDateString()}</td>
+                           <td className="px-5 py-3 text-text-secondary text-xs">{r.plan}</td>
+                           <td className="px-5 py-3 text-green-500 font-mono text-xs">{r.amount}</td>
+                           <td className="px-5 py-3 text-right">
+                             <button 
+                               onClick={() => setViewReceipt(r)}
+                               className="p-1.5 hover:text-white hover:bg-border-color rounded transition-colors inline-flex items-center gap-1 text-xs" 
+                               title="View Receipt"
+                             >
+                               <FileText size={14} /> View
+                             </button>
+                           </td>
+                         </tr>
+                       ))
+                     )}
+                   </tbody>
+                 </table>
+              </div>
+            </div>
+
+           {/* Payment Tracking Card */}
+           {currentTotal > 0 && (
+            <div className={`bg-surface border ${isLightMode ? 'border-gray-200' : 'border-border-color'} rounded-xl p-5`}>
+              <h3 className="font-heading font-semibold text-[14px] text-text-secondary uppercase tracking-tight mb-4">Payment Tracking</h3>
+              <div className="space-y-4">
+                {/* Progress Bar */}
+                <div>
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span className="text-text-secondary">Paid</span>
+                    <span className={`font-bold ${currentDue > 0 ? 'text-orange-500' : 'text-green-500'}`}>{paymentPercent}%</span>
+                  </div>
+                  <div className="w-full h-2.5 bg-[#0D0D0D] rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${currentDue > 0 ? 'bg-orange-500' : 'bg-green-500'}`}
+                      style={{ width: `${paymentPercent}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between border-b border-border-color/50 pb-2">
+                    <span className="text-text-secondary">Total Amount</span>
+                    <span className={`font-mono font-semibold ${isLightMode ? 'text-black' : 'text-white'}`}>₹{currentTotal}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-border-color/50 pb-2">
+                    <span className="text-text-secondary">Paid</span>
+                    <span className="font-mono font-semibold text-green-500">₹{currentPaid}</span>
+                  </div>
+                  <div className="flex justify-between pb-2">
+                    <span className="text-text-secondary">Due</span>
+                    <span className={`font-mono font-bold ${currentDue > 0 ? 'text-orange-500' : 'text-green-500'}`}>
+                      {currentDue > 0 ? `₹${currentDue}` : 'Fully Paid ✓'}
+                    </span>
+                  </div>
+                </div>
+
+                {currentDue > 0 && (
+                  <button 
+                    onClick={() => setIsPaymentOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold transition-colors"
+                  >
+                    <Download size={16} /> Record Payment
+                  </button>
+                )}
+              </div>
+            </div>
+           )}
         </div>
       </div>
+      
+      {/* Existing View Receipt modal inside Profile uses standard ReceiptModal with slightly modified props or just a custom view */}
+      {viewReceipt && (
+        <ReceiptModal 
+          member={member} // Pass current member details
+          settings={settings}
+          onClose={() => setViewReceipt(null)} 
+        />
+      )}
+
+      {/* Edit Member Modal */}
+      {isEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-surface border border-border-color rounded-xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden shadow-2xl">
+            <div className="px-6 py-4 border-b border-border-color flex justify-between items-center bg-[#0D0D0D]/30">
+              <h2 className="font-heading text-lg font-bold text-white flex items-center gap-2">
+                <Edit size={20} className="text-primary"/> Edit Member Details
+              </h2>
+              <button onClick={() => setIsEditOpen(false)} className="text-text-secondary hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setEditSaving(true);
+              try {
+                const updatedFields: any = {};
+                if (editName !== member.name) updatedFields.name = editName;
+                if (editPhone !== member.phone) updatedFields.phone = editPhone;
+                if (editEmail !== (member.email || '')) updatedFields.email = editEmail;
+                if (editDob !== (member.dob || '')) updatedFields.dob = editDob;
+                if (editGender !== (member.gender || 'Male')) updatedFields.gender = editGender;
+                if (editTrainer !== (member.trainer || 'None')) updatedFields.trainer = editTrainer;
+                if (editStatus !== (member.status || 'Active')) updatedFields.status = editStatus;
+                if (editPlan !== (member.plan || '')) updatedFields.plan = editPlan;
+                if (editStartDate !== (member.startDate || '')) updatedFields.startDate = editStartDate;
+                if (editExpiryDate !== (member.expiryDate || '')) updatedFields.expiryDate = editExpiryDate;
+                if (editAmount !== (member.amount || '')) updatedFields.amount = editAmount;
+                if (editPaymentMode !== (member.paymentMode || 'UPI')) updatedFields.paymentMode = editPaymentMode;
+
+                if (Object.keys(updatedFields).length === 0) {
+                  showToast('No changes detected', 'info');
+                  setIsEditOpen(false);
+                  return;
+                }
+
+                await onUpdate(updatedFields);
+                setIsEditOpen(false);
+                showToast('Member details updated successfully!', 'success');
+              } catch (err) {
+                showToast('Error updating member', 'error');
+              } finally {
+                setEditSaving(false);
+              }
+            }} className="p-6 overflow-y-auto no-scrollbar space-y-5">
+              {/* Personal Details Section */}
+              <div>
+                <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 flex items-center gap-2"><Contact size={14} /> Personal Details</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Full Name</label>
+                    <input required type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Phone Number</label>
+                    <input required type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Email</label>
+                    <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none" placeholder="Optional" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Date of Birth</label>
+                    <input type="date" value={editDob} onChange={e => setEditDob(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none [color-scheme:dark]" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Gender</label>
+                    <select value={editGender} onChange={e => setEditGender(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-text-secondary focus:border-primary/50 focus:outline-none">
+                      <option>Male</option><option>Female</option><option>Other</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Status</label>
+                    <select value={editStatus} onChange={e => setEditStatus(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-text-secondary focus:border-primary/50 focus:outline-none">
+                      <option>Active</option><option>Expired</option><option>Frozen</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <hr className="border-border-color" />
+
+              {/* Registration / Membership Section */}
+              <div>
+                <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 flex items-center gap-2"><Calendar size={14} /> Membership Details</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Plan</label>
+                    <select value={editPlan} onChange={e => setEditPlan(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-text-secondary focus:border-primary/50 focus:outline-none">
+                      {plans.map((p: any) => (
+                        <option key={p.name} value={p.name}>{p.name} - ₹{p.price}</option>
+                      ))}
+                      {/* Keep current plan visible even if it's custom */}
+                      {!plans.find((p: any) => p.name === editPlan) && editPlan && (
+                        <option value={editPlan}>{editPlan}</option>
+                      )}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Amount Paid</label>
+                    <input type="text" value={editAmount} onChange={e => setEditAmount(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none" placeholder="₹999" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Start Date</label>
+                    <input type="date" value={editStartDate} onChange={e => setEditStartDate(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none [color-scheme:dark]" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Expiry Date</label>
+                    <input type="date" value={editExpiryDate} onChange={e => setEditExpiryDate(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none [color-scheme:dark]" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Payment Mode</label>
+                    <select value={editPaymentMode} onChange={e => setEditPaymentMode(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-text-secondary focus:border-primary/50 focus:outline-none">
+                      <option>UPI</option><option>Cash</option><option>Card</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-text-secondary uppercase">Trainer</label>
+                    <select value={editTrainer} onChange={e => setEditTrainer(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-text-secondary focus:border-primary/50 focus:outline-none">
+                      <option>None</option>
+                      {(trainers || []).map((t: any) => (
+                        <option key={t.id} value={`${t.name} (${t.specialization})`}>{t.name} ({t.specialization})</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#0D0D0D] border border-border-color rounded-lg p-3 text-xs text-text-secondary">
+                <p className="flex items-center gap-1.5"><CheckCircle2 size={13} className="text-green-500" /> Only changed fields will be updated. All other records stay untouched.</p>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-3">
+                <button type="button" onClick={() => setIsEditOpen(false)} className="px-4 py-2 rounded-md text-sm font-semibold text-text-secondary hover:text-white transition-colors">Cancel</button>
+                <button type="submit" disabled={editSaving} className="px-6 py-2 rounded-md text-sm font-semibold text-white bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50">
+                  {editSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Record Payment Modal */}
+      {isPaymentOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-surface border border-border-color rounded-xl w-full max-w-md flex flex-col overflow-hidden shadow-2xl">
+            <div className="px-6 py-4 border-b border-border-color flex justify-between items-center bg-[#0D0D0D]/30">
+              <h2 className="font-heading text-lg font-bold text-white flex items-center gap-2">
+                <Download size={20} className="text-orange-500"/> Record Payment
+              </h2>
+              <button onClick={() => setIsPaymentOpen(false)} className="text-text-secondary hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-5">
+              {/* Current Balance Summary */}
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-text-secondary">Total Amount</span>
+                  <span className="text-white font-mono font-semibold">₹{currentTotal}</span>
+                </div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-text-secondary">Already Paid</span>
+                  <span className="text-green-500 font-mono font-semibold">₹{currentPaid}</span>
+                </div>
+                <div className="flex justify-between text-sm border-t border-orange-500/20 pt-2">
+                  <span className="text-orange-500 font-semibold">Outstanding Due</span>
+                  <span className="text-orange-500 font-mono font-bold">₹{currentDue}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-text-secondary uppercase">Payment Amount</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-sm">₹</span>
+                  <input 
+                    type="number" 
+                    value={paymentAmount} 
+                    onChange={e => setPaymentAmount(e.target.value)} 
+                    max={currentDue}
+                    className="w-full bg-[#0D0D0D] border border-border-color rounded-md pl-7 pr-3 py-2.5 text-sm text-white focus:border-orange-500/50 focus:outline-none" 
+                    placeholder={`Max ₹${currentDue}`} 
+                  />
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <button type="button" onClick={() => setPaymentAmount(String(Math.round(currentDue / 2)))} className="px-3 py-1 text-xs font-semibold bg-[#0D0D0D] border border-border-color rounded text-text-secondary hover:text-white transition-colors">Half</button>
+                  <button type="button" onClick={() => setPaymentAmount(String(currentDue))} className="px-3 py-1 text-xs font-semibold bg-[#0D0D0D] border border-border-color rounded text-text-secondary hover:text-white transition-colors">Full Due</button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-text-secondary uppercase">Payment Mode</label>
+                <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} className="w-full bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2.5 text-sm text-text-secondary focus:border-orange-500/50 focus:outline-none">
+                  <option>UPI</option>
+                  <option>Cash</option>
+                  <option>Card</option>
+                </select>
+              </div>
+
+              {/* Remaining after this payment */}
+              {Number(paymentAmount) > 0 && (
+                <div className={`text-center text-sm font-medium py-2 rounded-lg ${
+                  Number(paymentAmount) >= currentDue 
+                    ? 'bg-green-500/10 text-green-500' 
+                    : 'bg-[#0D0D0D] text-text-secondary'
+                }`}>
+                  {Number(paymentAmount) >= currentDue 
+                    ? '✓ This will clear the full balance!' 
+                    : `₹${currentDue - Number(paymentAmount)} will remain due after this payment`
+                  }
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end gap-3">
+                <button type="button" onClick={() => setIsPaymentOpen(false)} className="px-4 py-2 rounded-md text-sm font-semibold text-text-secondary hover:text-white transition-colors">Cancel</button>
+                <button 
+                  type="button"
+                  onClick={handleRecordPayment}
+                  disabled={!paymentAmount || Number(paymentAmount) <= 0}
+                  className="px-6 py-2 rounded-md text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Record ₹{paymentAmount || '0'} Payment
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Renew Modal */}
       {isRenewOpen && (
@@ -859,6 +1283,284 @@ function MemberProfile({ member, onBack, onUpdate, isLightMode, settings }: any)
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Receipt Modal ──────────────────────────────────────────────────────────
+
+function ReceiptModal({ member, settings, onClose }: { member: Member; settings: any; onClose: () => void }) {
+  const { showToast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const gymName = settings?.gymName || 'Corenix Club';
+  const gymAddress = 'Bohra Complex, Gitanjali Greencity, Suncity Sikar Road, Jaipur';
+  const gymPhone = '9982260055';
+  const gymEmail = 'fitunitedgym@gmail.com';
+  const receiptNo = `CRX-${member.id ? member.id.slice(-6).toUpperCase() : 'TEMP00'}`;
+  const receiptDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const getReceiptPDFData = () => ({
+    gymName,
+    gymAddress,
+    gymPhone,
+    gymEmail,
+    receiptNo,
+    receiptDate,
+    memberName: member.name,
+    memberPhone: member.phone,
+    memberEmail: member.email,
+    memberId: member.id ? member.id.slice(-6).toUpperCase() : 'TEMP',
+    plan: member.plan,
+    startDate: member.startDate,
+    expiryDate: member.expiryDate,
+    trainer: member.trainer || 'None',
+    paymentMode: member.paymentMode || 'UPI',
+    amount: member.amount,
+    totalAmount: member.totalAmount,
+    paidAmount: member.paidAmount,
+    dueAmount: member.dueAmount,
+  });
+
+  const saveReceiptToFirestore = async () => {
+    if (saved || !member.id) return;
+    setSaving(true);
+    try {
+      const receiptData: Receipt = {
+        receiptNo,
+        memberId: member.id!,
+        memberName: member.name,
+        memberPhone: member.phone,
+        plan: member.plan,
+        amount: member.amount,
+        startDate: member.startDate,
+        expiryDate: member.expiryDate,
+        paymentMode: member.paymentMode || 'UPI',
+        trainer: member.trainer || 'None',
+        date: new Date().toISOString().slice(0, 10),
+        timestamp: Date.now(),
+        gymName,
+        gymAddress,
+        gymPhone,
+        gymEmail,
+        sentViaWhatsApp: false
+      };
+      await addReceipt(receiptData);
+      setSaved(true);
+      showToast('Receipt saved to records', 'success');
+    } catch (err) {
+      showToast('Failed to save receipt', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    try {
+      const { downloadReceiptPDF } = await import('@/lib/receiptPdf');
+      downloadReceiptPDF(getReceiptPDFData());
+      // Also save to Firestore if not already saved
+      if (!saved && member.id) {
+        await saveReceiptToFirestore();
+      }
+      showToast('PDF downloaded successfully!', 'success');
+    } catch (err) {
+      showToast('Failed to generate PDF', 'error');
+    }
+  };
+
+  const buildWhatsAppMessage = () => {
+    const msg = `━━━━━━━━━━━━━━━━━━
+🏋️ *${gymName}*
+${gymAddress}
+📞 ${gymPhone}
+━━━━━━━━━━━━━━━━━━
+
+📄 *MEMBERSHIP RECEIPT*
+Receipt No: *#${receiptNo}*
+Date: ${receiptDate}
+
+👤 *Member Details*
+Name: ${member.name}
+Phone: ${member.phone}
+Member ID: ${member.id ? member.id.slice(-6).toUpperCase() : 'N/A'}
+
+📋 *Plan Details*
+Plan: ${member.plan}
+Validity: ${member.startDate} to ${member.expiryDate}
+Trainer: ${member.trainer || 'None'}
+Payment: ${member.paymentMode || 'UPI'}
+
+💰 *Total Paid: ${member.amount}*
+${member.dueAmount && member.dueAmount > 0 ? `⚠️ *Balance Due: ₹${member.dueAmount}*` : ''}
+━━━━━━━━━━━━━━━━━━
+Thank you for choosing ${gymName}! 💪
+Stay fit, stay healthy! 🔥
+_This is your official receipt. No refunds._`;
+
+    return encodeURIComponent(msg);
+  };
+
+  const handleWhatsAppSend = async () => {
+    setSending(true);
+    if (!saved && member.id) {
+      try {
+        const receiptData: Receipt = {
+          receiptNo,
+          memberId: member.id!,
+          memberName: member.name,
+          memberPhone: member.phone,
+          plan: member.plan,
+          amount: member.amount,
+          startDate: member.startDate,
+          expiryDate: member.expiryDate,
+          paymentMode: member.paymentMode || 'UPI',
+          trainer: member.trainer || 'None',
+          date: new Date().toISOString().slice(0, 10),
+          timestamp: Date.now(),
+          gymName,
+          gymAddress,
+          gymPhone,
+          gymEmail,
+          sentViaWhatsApp: true
+        };
+        await addReceipt(receiptData);
+        setSaved(true);
+      } catch (err) {
+        // Non-blocking
+      }
+    }
+
+    const cleanPhone = member.phone.replace(/[^0-9]/g, '');
+    const phoneWithCode = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`;
+    const url = `https://wa.me/${phoneWithCode}?text=${buildWhatsAppMessage()}`;
+    window.open(url, '_blank');
+    setSending(false);
+    showToast('Opening WhatsApp...', 'success');
+  };
+
+  const due = member.dueAmount ?? 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white text-black w-full max-w-md rounded-xl shadow-2xl overflow-hidden">
+        {/* Receipt Content */}
+        <div className="p-6">
+          {/* Gym Header */}
+          <div className="text-center mb-5 pb-4 border-b-2 border-dashed border-gray-300">
+            <h2 className="font-heading font-black text-2xl uppercase text-[#0D0D0D] tracking-wide">{gymName}</h2>
+            <p className="text-[11px] text-gray-500 mt-1 leading-relaxed max-w-[280px] mx-auto">{gymAddress}</p>
+            <p className="text-xs text-gray-500 mt-1 font-medium">📞 {gymPhone} • ✉ {gymEmail}</p>
+            <div className="mt-3 inline-block bg-[#0D0D0D] text-white text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-sm">
+              Membership Receipt
+            </div>
+          </div>
+          
+          {/* Receipt Meta */}
+          <div className="grid grid-cols-2 gap-y-1.5 text-xs mb-4 pb-3 border-b border-gray-200">
+            <div className="font-semibold text-gray-600">Receipt No:</div>
+            <div className="text-right font-mono font-bold text-[#0D0D0D]">#{receiptNo}</div>
+            <div className="font-semibold text-gray-600">Date:</div>
+            <div className="text-right">{receiptDate}</div>
+            <div className="font-semibold text-gray-600">Member ID:</div>
+            <div className="text-right font-mono">{member.id ? member.id.slice(-6).toUpperCase() : 'TEMP'}</div>
+          </div>
+
+          {/* Member Details */}
+          <div className="mb-4 pb-3 border-b border-gray-200">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Member Details</div>
+            <div className="grid grid-cols-2 gap-y-1.5 text-sm">
+              <div className="font-semibold text-gray-600">Name:</div>
+              <div className="text-right font-medium text-[#0D0D0D]">{member.name}</div>
+              <div className="font-semibold text-gray-600">Phone:</div>
+              <div className="text-right">{member.phone}</div>
+              {member.email && (
+                <>
+                  <div className="font-semibold text-gray-600">Email:</div>
+                  <div className="text-right text-xs">{member.email}</div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Plan Details */}
+          <div className="mb-4 pb-3 border-b border-gray-200">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Plan Details</div>
+            <div className="grid grid-cols-2 gap-y-1.5 text-sm">
+              <div className="font-semibold text-gray-600">Plan:</div>
+              <div className="text-right font-medium">{member.plan}</div>
+              <div className="font-semibold text-gray-600">Start Date:</div>
+              <div className="text-right">{member.startDate}</div>
+              <div className="font-semibold text-gray-600">Expiry Date:</div>
+              <div className="text-right">{member.expiryDate}</div>
+              <div className="font-semibold text-gray-600">Trainer:</div>
+              <div className="text-right">{member.trainer || 'None'}</div>
+              <div className="font-semibold text-gray-600">Payment:</div>
+              <div className="text-right">{member.paymentMode || 'UPI'}</div>
+            </div>
+          </div>
+
+          {/* Total */}
+          <div className="bg-[#0D0D0D] text-white rounded-lg px-4 py-3 flex justify-between items-center mb-3">
+            <span className="font-bold text-sm uppercase tracking-wider">Total Paid</span>
+            <span className="font-black text-xl">{member.amount}</span>
+          </div>
+
+          {/* Due Amount */}
+          {due > 0 && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-2.5 flex justify-between items-center mb-3">
+              <span className="font-bold text-xs uppercase tracking-wider text-orange-600 flex items-center gap-1.5">
+                <AlertTriangle size={13} /> Balance Due
+              </span>
+              <span className="font-black text-lg text-orange-600">₹{due}</span>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="text-center text-[10px] text-gray-400 italic leading-relaxed">
+            Thank you for choosing {gymName}! 💪<br/>
+            Stay fit, stay healthy. This is your official receipt.<br/>
+            <span className="font-semibold not-italic">No refunds applicable.</span>
+          </div>
+        </div>
+        
+        {/* Action Buttons */}
+        <div className="bg-gray-50 p-4 flex flex-wrap gap-2 border-t border-gray-200">
+          <button 
+            onClick={onClose} 
+            className="px-4 py-2 text-sm font-bold text-gray-500 hover:text-black transition-colors rounded-lg hover:bg-gray-100"
+          >
+            Close
+          </button>
+          <div className="flex-1" />
+          <button 
+            onClick={saveReceiptToFirestore}
+            disabled={saving || saved}
+            className={`px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 transition-colors ${
+              saved 
+                ? 'bg-green-50 text-green-600 cursor-default' 
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {saved ? <><CheckCircle2 size={15} /> Saved</> : saving ? 'Saving...' : <><Download size={15} /> Save Record</>}
+          </button>
+          <button 
+            onClick={handleDownloadPDF}
+            className="px-4 py-2 text-sm bg-gray-800 text-white font-bold rounded-lg hover:bg-black transition-colors flex items-center gap-2"
+          >
+            <FileText size={15} /> Download PDF
+          </button>
+          <button 
+            onClick={handleWhatsAppSend}
+            disabled={sending}
+            className="px-4 py-2 text-sm bg-[#25D366] text-white font-bold rounded-lg hover:bg-[#1eb954] transition-colors flex items-center gap-2 shadow-sm"
+          >
+            <Send size={15} /> {sending ? 'Sending...' : 'WhatsApp'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

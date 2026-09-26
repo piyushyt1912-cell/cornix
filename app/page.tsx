@@ -40,7 +40,7 @@ import {
   getMembers, addMember, updateMember, deleteMember,
   getAttendance, markAttendance,
   getStaff, addStaff, updateStaff, deleteStaff, updateStaffStatus,
-  getTrainers, addTrainer,
+  getTrainers, addTrainer, updateTrainer, deleteTrainer,
   getReviews, addReview,
   getOffers, addOffer,
   getSettings, saveSettings,
@@ -84,7 +84,6 @@ export default function CorenixApp() {
   
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [mounted, setMounted] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
   const [isLightMode, setIsLightMode] = useState(false);
@@ -107,48 +106,64 @@ export default function CorenixApp() {
     if (!user) return;
     
     async function initDb() {
-      // Purge any old cached demo data from localStorage
-      clearOldDemoData();
-      // Verify Firestore connectivity (no seeding)
-      await seedDatabaseIfEmpty();
-      
-      const [fetchedMembers, fetchedAttendance, fetchedAttRecords, fetchedStaff, fetchedTrainers, fetchedReviews, fetchedOffers, fetchedSettings, fetchedRemovedMembers] = await Promise.all([
-        getMembers(),
-        getAttendance(),
-        getAttendanceRecords(),
-        getStaff(),
-        getTrainers(),
-        getReviews(),
-        getOffers(),
-        getSettings(),
-        getRemovedMembers()
-      ]);
+      try {
+        // Purge any old cached demo data from localStorage
+        clearOldDemoData();
+        // Verify Firestore connectivity (no seeding)
+        await seedDatabaseIfEmpty();
+        
+        const [fetchedMembers, fetchedAttendance, fetchedAttRecords, fetchedStaff, fetchedTrainers, fetchedReviews, fetchedOffers, fetchedSettings, fetchedRemovedMembers] = await Promise.all([
+          getMembers(),
+          getAttendance(),
+          getAttendanceRecords(),
+          getStaff(),
+          getTrainers(),
+          getReviews(),
+          getOffers(),
+          getSettings(),
+          getRemovedMembers()
+        ]);
 
-      setMembers(fetchedMembers);
-      setAttendance(fetchedAttendance);
-      setAttendanceRecords(fetchedAttRecords);
-      setStaff(fetchedStaff);
-      setTrainers(fetchedTrainers);
-      setReviews(fetchedReviews);
-      setOffers(fetchedOffers);
-      setRemovedMembers(fetchedRemovedMembers);
-      if (fetchedSettings) setSettings(fetchedSettings);
+        setMembers(fetchedMembers.map(m => {
+          if (!m.expiryDate) return m;
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const expiry = new Date(m.expiryDate + 'T00:00:00');
+          if (expiry < today) {
+            return { ...m, status: 'Expired' };
+          }
+          const daysLeft = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysLeft <= 7 && m.status === 'Active') {
+            return { ...m, status: 'Expiring Soon' };
+          }
+          return m;
+        }));
+        setAttendance(fetchedAttendance);
+        setAttendanceRecords(fetchedAttRecords);
+        setStaff(fetchedStaff);
+        setTrainers(fetchedTrainers);
+        setReviews(fetchedReviews);
+        setOffers(fetchedOffers);
+        setRemovedMembers(fetchedRemovedMembers);
+        if (fetchedSettings) setSettings(fetchedSettings);
 
-      // Fetch today's staff attendance
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const fetchedStaffAtt = await getStaffAttendanceByDate(todayStr);
-      setStaffAttendance(fetchedStaffAtt);
+        // Fetch today's staff attendance
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const fetchedStaffAtt = await getStaffAttendanceByDate(todayStr);
+        setStaffAttendance(fetchedStaffAtt);
 
-      // Auto-initialize daily absences for admin (runs only once per day)
-      const currentRole = user?.role || 'receptionist';
-      if (currentRole === 'admin') {
-        await initializeDailyAbsences(fetchedStaff, fetchedTrainers, todayStr, user?.email || 'admin');
+        // Auto-initialize daily absences for admin (runs only once per day)
+        const currentRole = user?.role || 'receptionist';
+        if (currentRole === 'admin') {
+          await initializeDailyAbsences(fetchedStaff, fetchedTrainers, todayStr, user?.email || 'admin');
+        }
+      } catch (error) {
+        console.error('Failed to load data from Firestore:', error);
+      } finally {
+        setDbLoading(false);
       }
-      
-      setDbLoading(false);
     }
     initDb();
-    setMounted(true);
   }, [user]);
 
   // Database Action Handlers
@@ -201,6 +216,16 @@ export default function CorenixApp() {
     return saved;
   };
 
+  const handleUpdateTrainer = async (id: string, data: Partial<Trainer>) => {
+    await updateTrainer(id, data);
+    setTrainers(prev => prev.map(t => t.id === id ? { ...t, ...data } : t));
+  };
+
+  const handleDeleteTrainer = async (id: string) => {
+    await deleteTrainer(id);
+    setTrainers(prev => prev.filter(t => t.id !== id));
+  };
+
   const handleAddReview = async (reviewData: Review) => {
     const saved = await addReview(reviewData);
     setReviews(prev => [...prev, saved]);
@@ -251,7 +276,7 @@ export default function CorenixApp() {
 
   const today = new Date();
   const options: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-  const dateStr = mounted ? today.toLocaleDateString('en-US', options) : '';
+  const dateStr = typeof window !== 'undefined' ? today.toLocaleDateString('en-US', options) : '';
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -505,7 +530,7 @@ export default function CorenixApp() {
             {activeTab === 'Members' && <MembersView members={members} trainers={trainers} onAddMember={handleAddMember} onUpdateMember={handleUpdateMember} onDeleteMember={handleDeleteMember} onRemoveMember={handleRemoveMember} removedMembers={removedMembers} isLightMode={isLightMode} role={role} settings={settings} />}
             {activeTab === 'Attendance' && <AttendanceView members={members} staff={staff} trainers={trainers} attendance={attendanceRecords} onAttendanceUpdate={setAttendanceRecords} isLightMode={isLightMode} role={role} />}
             {activeTab === 'Staff' && role === 'admin' && <StaffView staff={staff} onAddStaff={handleAddStaff} onUpdateStaff={handleUpdateStaff} onDeleteStaff={handleDeleteStaff} onUpdateStaffStatus={handleUpdateStaffStatus} isLightMode={isLightMode} role={role} />}
-            {activeTab === 'Trainers' && <TrainersView trainers={trainers} members={members} onAddTrainer={handleAddTrainer} isLightMode={isLightMode} role={role} />}
+            {activeTab === 'Trainers' && <TrainersView trainers={trainers} members={members} onAddTrainer={handleAddTrainer} onUpdateTrainer={handleUpdateTrainer} onDeleteTrainer={handleDeleteTrainer} onUpdateMember={handleUpdateMember} isLightMode={isLightMode} role={role} />}
             {activeTab === 'Reports' && role === 'admin' && <ReportsView members={members} attendance={attendanceRecords} isLightMode={isLightMode} />}
             {activeTab === 'Offers' && <OffersView offers={offers} onAddOffer={handleAddOffer} isLightMode={isLightMode} role={role} />}
             {activeTab === 'Measurements' && <MeasurementsView members={members} isLightMode={isLightMode} />}

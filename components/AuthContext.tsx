@@ -39,7 +39,7 @@ const ACTIVITY_CHECK_INTERVAL_MS = 60 * 1000; // Check every minute
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const lastActivityRef = useRef<number>(Date.now());
+  const lastActivityRef = useRef<number>(0);
   const sessionTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Track user activity for session timeout
@@ -50,6 +50,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Session timeout checker
   useEffect(() => {
     if (!user) return;
+
+    // Initialize last activity timestamp when session starts
+    lastActivityRef.current = Date.now();
 
     // Listen for user activity
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'mousemove'];

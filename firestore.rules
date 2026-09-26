@@ -8,15 +8,22 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    // Helper: check if user has a role document
+    function hasRoleDoc() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    
     // Helper: check if user is admin
     function isAdmin() {
       return isAuthenticated() && 
+             hasRoleDoc() &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
     // Helper: check if user is staff (admin or receptionist)
     function isStaff() {
       return isAuthenticated() && 
+             hasRoleDoc() &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'receptionist'];
     }
 
@@ -36,19 +43,20 @@ service cloud.firestore {
              (!('amount' in data) || data.amount is string);
     }
 
-    // Users collection — admin can read/write all, users can read their own
-    // SECURITY: Users CANNOT write their own role (prevents privilege escalation)
+    // Users collection — handles bootstrap and role management
     match /users/{userId} {
+      // Any authenticated user can read their own doc; admins can read all
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       
-      // Only admins can write to user documents
-      // This prevents users from changing their own role
-      allow write: if isAdmin();
-      
-      // Users can update their own document, but ONLY non-role fields
-      allow update: if isAuthenticated() && 
+      // Allow authenticated users to CREATE their own document if it doesn't exist yet
+      // This solves the bootstrap problem where the first user has no role doc
+      allow create: if isAuthenticated() && 
                        request.auth.uid == userId &&
-                       !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']);
+                       request.resource.data.keys().hasAll(['email', 'role']) &&
+                       request.resource.data.role in ['admin', 'receptionist'];
+      
+      // Only admins can update/delete user documents
+      allow update, delete: if isAdmin();
     }
 
     // Members — all staff can read, only admin can delete
@@ -114,6 +122,14 @@ service cloud.firestore {
     match /removed_members/{removedId} {
       allow read: if isStaff();
       allow write: if isAdmin();
+    }
+
+    // Receipts — staff can read and create, admin can update, never deletable
+    match /receipts/{receiptId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update: if isAdmin();
+      allow delete: if false;
     }
 
     // Staff Attendance — staff can read, only admin can create/update/delete

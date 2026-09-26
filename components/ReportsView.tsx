@@ -12,6 +12,7 @@ interface ReportsViewProps {
 export default function ReportsView({ members, attendance, isLightMode }: ReportsViewProps) {
   const [tab, setTab] = useState('monthly');
   const [attendanceMonth, setAttendanceMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [dailyDate, setDailyDate] = useState(() => new Date().toISOString().slice(0, 10));
   return (
     <div className="w-full flex flex-col min-h-full pb-8">
       <header className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -30,7 +31,7 @@ export default function ReportsView({ members, attendance, isLightMode }: Report
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-surface border border-border-color p-4 rounded-xl mb-6 shadow-sm">
          <div className="flex items-center gap-3">
            {tab === 'monthly' && <input type="month" className="bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none [color-scheme:dark]" defaultValue={new Date().toISOString().slice(0, 7)} />}
-           {tab === 'daily' && <input type="date" className="bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none [color-scheme:dark]" defaultValue={new Date().toISOString().slice(0, 10)} />}
+           {tab === 'daily' && <input type="date" value={dailyDate} onChange={e => setDailyDate(e.target.value)} className="bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none [color-scheme:dark]" />}
            {tab === 'attendance' && <input type="month" value={attendanceMonth} onChange={e => setAttendanceMonth(e.target.value)} className="bg-[#0D0D0D] border border-border-color rounded-md px-3 py-2 text-sm text-white focus:border-primary/50 focus:outline-none [color-scheme:dark]" />}
          </div>
          <div className="flex gap-2">
@@ -41,7 +42,7 @@ export default function ReportsView({ members, attendance, isLightMode }: Report
       </div>
 
       {tab === 'monthly' && <MonthlyReportTab members={members} isLightMode={isLightMode} />}
-      {tab === 'daily' && <DailyReportTab members={members} attendance={attendance} isLightMode={isLightMode} />}
+      {tab === 'daily' && <DailyReportTab members={members} attendance={attendance} isLightMode={isLightMode} selectedDate={dailyDate} />}
       {tab === 'member' && <MemberReportTab members={members} isLightMode={isLightMode} />}
       {tab === 'attendance' && <AttendanceReportTab attendance={attendance} month={attendanceMonth} isLightMode={isLightMode} />}
     </div>
@@ -207,74 +208,135 @@ function MonthlyReportTab({ members, isLightMode }: { members: Member[]; isLight
   );
 }
 
-function DailyReportTab({ members, attendance, isLightMode }: { members: Member[]; attendance: AttendanceRecord[]; isLightMode: boolean }) {
-  const todayStr = new Date().toISOString().slice(0, 10);
-  
-  // Calculate collection today
-  const todayRegistrations = members.filter(m => m.startDate === todayStr);
-  const collectionToday = todayRegistrations.reduce((sum, m) => sum + (parseInt(m.amount.replace(/[^0-9]/g, '')) || 0), 0);
-  const checkinsToday = attendance.filter(a => a.date === todayStr).length;
-  const newToday = todayRegistrations.length;
-  const renewalsToday = todayRegistrations.filter(m => parseInt(m.amount.replace(/[^0-9]/g, '')) > 2000).length;
+function DailyReportTab({ members, attendance, isLightMode, selectedDate }: { members: Member[]; attendance: AttendanceRecord[]; isLightMode: boolean; selectedDate: string }) {
+  const dateStr = selectedDate;
+  const displayDate = new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
+
+  // Registrations for selected date (by createdAt first, fallback to startDate)
+  const dayRegistrations = members.filter(m => {
+    if (m.createdAt) {
+      return m.createdAt.slice(0, 10) === dateStr;
+    }
+    return m.startDate === dateStr;
+  });
+
+  const collectionDay = dayRegistrations.reduce((sum, m) => sum + (parseInt(m.amount.replace(/[^0-9]/g, '')) || 0), 0);
+  const dueTotal = dayRegistrations.reduce((sum, m) => sum + (m.dueAmount ?? 0), 0);
+  const checkinsDay = attendance.filter(a => a.date === dateStr).length;
+  const newDay = dayRegistrations.length;
+  const cashDay = dayRegistrations.filter(m => m.paymentMode === 'Cash').reduce((sum, m) => sum + (parseInt(m.amount.replace(/[^0-9]/g, '')) || 0), 0);
+  const onlineDay = collectionDay - cashDay;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Date heading */}
+      <div className="flex items-center gap-3">
+        <CalendarDays size={18} className="text-primary" />
+        <span className={`font-heading font-semibold text-lg ${isLightMode ? 'text-black' : 'text-white'}`}>{displayDate}</span>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div className="bg-surface border border-border-color p-4 rounded-xl relative overflow-hidden group">
           <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform"><IndianRupee size={80} /></div>
-          <div className="text-[11px] text-text-secondary uppercase font-semibold mb-1 relative">Collection Today</div>
-          <div className={`font-heading text-2xl font-bold ${isLightMode ? 'text-black' : 'text-white'} tracking-tight relative`}>₹ {collectionToday.toLocaleString('en-IN')}</div>
+          <div className="text-[11px] text-text-secondary uppercase font-semibold mb-1 relative">Collection</div>
+          <div className={`font-heading text-2xl font-bold ${isLightMode ? 'text-black' : 'text-white'} tracking-tight relative`}>₹{collectionDay.toLocaleString('en-IN')}</div>
         </div>
         <div className="bg-surface border border-border-color p-4 rounded-xl relative overflow-hidden group">
           <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform"><UserCheck size={80} /></div>
           <div className="text-[11px] text-text-secondary uppercase font-semibold mb-1 relative">Check-ins</div>
-          <div className={`font-heading text-2xl font-bold ${isLightMode ? 'text-black' : 'text-white'} tracking-tight relative`}>{checkinsToday}</div>
+          <div className={`font-heading text-2xl font-bold ${isLightMode ? 'text-black' : 'text-white'} tracking-tight relative`}>{checkinsDay}</div>
         </div>
         <div className="bg-surface border border-border-color p-4 rounded-xl relative overflow-hidden group">
            <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform"><UserPlus size={80} /></div>
-          <div className="text-[11px] text-text-secondary uppercase font-semibold mb-1 relative">New Members</div>
-          <div className={`font-heading text-2xl font-bold ${isLightMode ? 'text-black' : 'text-white'} tracking-tight relative`}>{newToday}</div>
+          <div className="text-[11px] text-text-secondary uppercase font-semibold mb-1 relative">Registrations</div>
+          <div className={`font-heading text-2xl font-bold ${isLightMode ? 'text-black' : 'text-white'} tracking-tight relative`}>{newDay}</div>
         </div>
         <div className="bg-surface border border-border-color p-4 rounded-xl relative overflow-hidden group">
-           <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform"><RefreshCw size={80} /></div>
-          <div className="text-[11px] text-text-secondary uppercase font-semibold mb-1 relative">Renewals</div>
-          <div className={`font-heading text-2xl font-bold ${isLightMode ? 'text-black' : 'text-white'} tracking-tight relative`}>{renewalsToday}</div>
+          <div className="text-[11px] text-text-secondary uppercase font-semibold mb-1">Cash</div>
+          <div className={`font-heading text-2xl font-bold text-yellow-500 tracking-tight`}>₹{cashDay.toLocaleString('en-IN')}</div>
         </div>
+        <div className="bg-surface border border-border-color p-4 rounded-xl relative overflow-hidden group">
+          <div className="text-[11px] text-text-secondary uppercase font-semibold mb-1">Online</div>
+          <div className={`font-heading text-2xl font-bold text-blue-500 tracking-tight`}>₹{onlineDay.toLocaleString('en-IN')}</div>
+        </div>
+        {dueTotal > 0 && (
+          <div className="bg-surface border border-orange-500/30 p-4 rounded-xl relative overflow-hidden group">
+            <div className="text-[11px] text-orange-500 uppercase font-semibold mb-1">Dues</div>
+            <div className="font-heading text-2xl font-bold text-orange-500 tracking-tight">₹{dueTotal.toLocaleString('en-IN')}</div>
+          </div>
+        )}
       </div>
 
       <div className="bg-surface border border-border-color rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border-color flex justify-between items-center bg-[#0D0D0D]/30">
-          <h3 className="font-heading font-semibold text-[14px] text-text-secondary uppercase tracking-tight">Today's Transactions</h3>
+          <h3 className="font-heading font-semibold text-[14px] text-text-secondary uppercase tracking-tight">Transactions</h3>
+          <span className="text-xs bg-surface border border-border-color px-2 py-0.5 rounded text-text-secondary">{dayRegistrations.length} entries</span>
         </div>
-        <div className="overflow-x-auto max-h-[300px] overflow-y-auto no-scrollbar">
+        <div className="overflow-x-auto max-h-[400px] overflow-y-auto no-scrollbar">
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-[#0D0D0D] border-b border-border-color text-text-secondary text-[11px] uppercase tracking-wider sticky top-0 z-10">
               <tr>
-                <th className="px-5 py-3 font-medium">Time Joined</th>
+                <th className="px-5 py-3 font-medium">#</th>
                 <th className="px-5 py-3 font-medium">Member Name</th>
-                <th className="px-5 py-3 font-medium">Amount</th>
+                <th className="px-5 py-3 font-medium">Phone</th>
                 <th className="px-5 py-3 font-medium">Plan</th>
+                <th className="px-5 py-3 font-medium">Amount</th>
+                <th className="px-5 py-3 font-medium">Due</th>
                 <th className="px-5 py-3 font-medium">Mode</th>
+                <th className="px-5 py-3 font-medium text-right">Time</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-color">
-              {todayRegistrations.map((t, i) => (
-                <tr key={t.id || i} className="hover:bg-[#0D0D0D]/50 transition-colors">
-                  <td className="px-5 py-3 text-text-secondary">Today</td>
-                  <td className={`px-5 py-3 font-medium ${isLightMode ? 'text-black' : 'text-white'}`}>{t.name}</td>
-                  <td className="px-5 py-3 font-mono text-green-500">{t.amount}</td>
-                  <td className="px-5 py-3 text-text-secondary">{t.plan}</td>
-                  <td className="px-5 py-3 text-text-secondary">{t.paymentMode || 'UPI'}</td>
-                </tr>
-              ))}
-              {todayRegistrations.length === 0 && (
+              {dayRegistrations.map((t, i) => {
+                const regTime = t.createdAt ? new Date(t.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—';
+                const due = t.dueAmount ?? 0;
+                return (
+                  <tr key={t.id || i} className="hover:bg-[#0D0D0D]/50 transition-colors">
+                    <td className="px-5 py-3 text-text-secondary text-xs font-mono">{i + 1}</td>
+                    <td className={`px-5 py-3 font-medium ${isLightMode ? 'text-black' : 'text-white'}`}>{t.name}</td>
+                    <td className="px-5 py-3 text-text-secondary">{t.phone}</td>
+                    <td className="px-5 py-3 text-text-secondary">{t.plan}</td>
+                    <td className="px-5 py-3 font-mono text-green-500">{t.amount}</td>
+                    <td className="px-5 py-3">
+                      {due > 0 ? (
+                        <span className="text-orange-500 font-mono font-semibold text-xs">₹{due}</span>
+                      ) : (
+                        <span className="text-green-500 text-xs">Paid ✓</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                        t.paymentMode === 'Cash' ? 'bg-yellow-500/10 text-yellow-500' :
+                        t.paymentMode === 'UPI' ? 'bg-blue-500/10 text-blue-500' :
+                        'bg-purple-500/10 text-purple-500'
+                      }`}>
+                        {t.paymentMode || 'UPI'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right text-text-secondary text-xs flex items-center justify-end gap-1">
+                      <Clock size={12} /> {regTime}
+                    </td>
+                  </tr>
+                );
+              })}
+              {dayRegistrations.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-8 text-center text-text-secondary">No transactions recorded today.</td>
+                  <td colSpan={8} className="px-5 py-8 text-center text-text-secondary">No transactions recorded for this date.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        {/* Summary footer */}
+        {dayRegistrations.length > 0 && (
+          <div className="px-5 py-3 border-t border-border-color bg-[#0D0D0D]/30 flex flex-wrap items-center gap-4 text-xs">
+            <span className="text-text-secondary">Total: <strong className={isLightMode ? 'text-black' : 'text-white'}>{dayRegistrations.length} registrations</strong></span>
+            <span className="text-text-secondary">Collected: <strong className="text-green-500">₹{collectionDay.toLocaleString('en-IN')}</strong></span>
+            <span className="text-text-secondary">Cash: <strong className="text-yellow-500">₹{cashDay.toLocaleString('en-IN')}</strong></span>
+            <span className="text-text-secondary">Online: <strong className="text-blue-500">₹{onlineDay.toLocaleString('en-IN')}</strong></span>
+            {dueTotal > 0 && <span className="text-text-secondary">Dues: <strong className="text-orange-500">₹{dueTotal.toLocaleString('en-IN')}</strong></span>}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -92,6 +92,12 @@ export default function SettingsView({ settings, onSaveSettings, isLightMode }: 
     setPlans(nextPlans);
   };
 
+  const handlePlanDurChange = (index: number, newDur: string) => {
+    const nextPlans = [...plans];
+    nextPlans[index] = { ...nextPlans[index], dur: newDur };
+    setPlans(nextPlans);
+  };
+
   const handleHourToggle = (day: string) => {
     const nextHours = { ...businessHours };
     nextHours[day] = { ...nextHours[day], active: !nextHours[day].active };
@@ -236,7 +242,18 @@ export default function SettingsView({ settings, onSaveSettings, isLightMode }: 
                           <td className="px-4 py-3 font-bold text-white">
                             <input type="text" value={p.name} onChange={e => handlePlanNameChange(i, e.target.value)} className="bg-transparent border-b border-transparent hover:border-text-secondary focus:border-primary focus:outline-none w-full" />
                           </td>
-                          <td className="px-4 py-3 text-text-secondary">{p.dur}</td>
+                          <td className="px-4 py-3 text-text-secondary">
+                            <select 
+                              value={p.dur} 
+                              onChange={e => handlePlanDurChange(i, e.target.value)} 
+                              className="bg-[#0D0D0D] border border-border-color rounded px-2 py-1 focus:outline-none focus:border-primary text-sm"
+                            >
+                              <option value="1 Month">1 Month</option>
+                              <option value="3 Months">3 Months</option>
+                              <option value="6 Months">6 Months</option>
+                              <option value="12 Months">12 Months</option>
+                            </select>
+                          </td>
                           <td className="px-4 py-3 font-mono text-green-400">
                             <input type="number" value={p.price} onChange={e => handlePlanPriceChange(i, e.target.value)} className="bg-[#0D0D0D] border border-border-color rounded px-2 py-1 w-24 focus:outline-none focus:border-primary" />
                           </td>

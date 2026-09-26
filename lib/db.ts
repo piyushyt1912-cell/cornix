@@ -32,6 +32,10 @@ export interface Member {
   gender?: string;
   trainer?: string;
   paymentMode?: string;
+  totalAmount?: number;
+  paidAmount?: number;
+  dueAmount?: number;
+  createdAt?: string; // ISO date string of actual registration timestamp
 }
 
 export interface Attendance {
@@ -60,18 +64,49 @@ export interface Staff {
 export interface Trainer {
   id?: string;
   name: string;
+  specialty: string;
   specialization: string;
-  phone: string;
   experience: string;
-  membersCount: number;
-  status: string;
-  bio: string;
-  salary: string;
+  phone: string;
   timing: string;
+  salary: string;
+  status: string;
+  members: number;
+  membersCount: number;
+  shifts?: {
+    morning: { enabled: boolean; start: string; end: string };
+    evening: { enabled: boolean; start: string; end: string };
+  };
+}
+
+export interface Review {
+  id?: string;
+  name: string;
+  memberName?: string;
+  r: number;
+  rating?: number;
+  text: string;
+  comment?: string;
+  date: string;
+}
+
+export interface Offer {
+  id?: string;
+  name: string;
+  title?: string;
+  description?: string;
+  discount?: string;
+  target: string;
+  date: string;
+  count: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
 }
 
 export interface Measurement {
   id?: string;
+  memberName?: string;
   phone: string;
   date: string;
   weight: number;
@@ -80,27 +115,15 @@ export interface Measurement {
   chest: number;
   waist: number;
   arms: number;
-}
-
-export interface Review {
-  id?: string;
-  name: string;
-  text: string;
-  r: number;
-  date: string;
-}
-
-export interface Offer {
-  id?: string;
-  name: string;
-  target: string;
-  date: string;
-  count: string;
+  hips?: number;
+  biceps?: number;
+  thighs?: number;
+  bmi?: string;
 }
 
 export interface RemovedMember {
   id?: string;
-  memberId: string;
+  memberId?: string;
   name: string;
   phone: string;
   plan: string;
@@ -179,40 +202,6 @@ export interface DailyInit {
   absentCount: number;
 }
 
-// ─── Fallback Logic ─────────────────────────────────────────────────────────
-// If Firestore is unreachable, the app gracefully falls back to localStorage
-// so staff can continue working. Data is empty by default (no dummy data).
-
-let useFallback = (typeof window !== 'undefined' && sessionStorage.getItem('corenix_useFallback') === 'true') || false;
-
-function setFallback() {
-  useFallback = true;
-  if (typeof window !== 'undefined') {
-    sessionStorage.setItem('corenix_useFallback', 'true');
-  }
-}
-
-// ─── localStorage Utilities ─────────────────────────────────────────────────
-
-function getLocal<T>(key: string, defaultData: T): T {
-  if (typeof window === 'undefined') return defaultData;
-  const stored = localStorage.getItem(`corenix_${key}`);
-  if (stored) {
-    try {
-      return JSON.parse(stored) as T;
-    } catch {
-      return defaultData;
-    }
-  }
-  return defaultData;
-}
-
-function saveLocal(key: string, data: any) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(`corenix_${key}`, JSON.stringify(data));
-  }
-}
-
 // ─── Old Data Cleanup ───────────────────────────────────────────────────────
 
 /**
@@ -222,156 +211,91 @@ function saveLocal(key: string, data: any) {
  */
 export function clearOldDemoData() {
   if (typeof window === 'undefined') return;
-  const cleanupKey = 'corenix_demo_data_cleared_v2';
+  const cleanupKey = 'corenix_demo_data_cleared_v3';
   if (localStorage.getItem(cleanupKey)) return; // Already cleared
 
   // Remove old demo data keys
   const keysToRemove = [
     'corenix_members', 'corenix_staff', 'corenix_trainers', 
     'corenix_reviews', 'corenix_offers', 'corenix_attendance',
-    'corenix_measurements', 'corenix_settings'
+    'corenix_measurements', 'corenix_settings',
+    'corenix_attendance_records', 'corenix_staff_attendance',
+    'corenix_payslips', 'corenix_removed_members',
+    'corenix_demo_data_cleared_v2'
   ];
   keysToRemove.forEach(key => localStorage.removeItem(key));
   
-  // Clear fallback flag so app retries Firestore
+  // Clear old fallback flag 
   sessionStorage.removeItem('corenix_useFallback');
-  useFallback = false;
 
   localStorage.setItem(cleanupKey, 'true');
-  console.log('Old demo data cleared from localStorage.');
+  console.log('Old localStorage data cleared. All data is now Firestore-only.');
 }
 
 // ─── Database Initialization ────────────────────────────────────────────────
 
 /**
  * Verify Firestore connectivity on startup.
- * If Firestore is unreachable, switch to localStorage fallback.
- * No dummy data is seeded — the database starts clean.
+ * Throws if Firestore is unreachable so the UI can show an error.
  */
 export async function seedDatabaseIfEmpty() {
-  if (useFallback) return;
   try {
     // Simple connectivity test — try to read one doc from members
     const membersCol = collection(db, 'members');
     await getDocs(query(membersCol, limit(1)));
     console.log('Firestore connection verified.');
   } catch (error) {
-    console.warn('Firestore unreachable. Using localStorage fallback.', error);
-    setFallback();
+    console.error('Firestore connectivity check failed:', error);
+    // Don't throw — let the individual operations handle errors
+    // This prevents a single transient failure from blocking the entire app
   }
 }
 
 // ─── Members ────────────────────────────────────────────────────────────────
 
 export async function getMembers(): Promise<Member[]> {
-  if (useFallback) return getLocal<Member[]>('members', []);
-  try {
-    const querySnapshot = await getDocs(collection(db, 'members'));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member));
-  } catch (error) {
-    console.warn('getMembers failed. Using localStorage.', error);
-    setFallback();
-    return getLocal<Member[]>('members', []);
-  }
+  const querySnapshot = await getDocs(collection(db, 'members'));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member));
 }
 
 export async function addMember(member: Member): Promise<Member> {
-  if (useFallback) {
-    const local = getLocal<Member[]>('members', []);
-    const newMember = { id: `m_${Date.now()}`, ...member };
-    local.push(newMember);
-    saveLocal('members', local);
-    return newMember;
-  }
-  try {
-    const docRef = await addDoc(collection(db, 'members'), member);
-    return { id: docRef.id, ...member };
-  } catch (error) {
-    setFallback();
-    return addMember(member);
-  }
+  const memberWithTimestamp = {
+    ...member,
+    createdAt: new Date().toISOString()
+  };
+  const docRef = await addDoc(collection(db, 'members'), memberWithTimestamp);
+  return { id: docRef.id, ...memberWithTimestamp };
 }
 
 export async function updateMember(id: string, member: Partial<Member>): Promise<void> {
-  if (useFallback) {
-    const local = getLocal<Member[]>('members', []);
-    const updated = local.map((m: any) => m.id === id ? { ...m, ...member } : m);
-    saveLocal('members', updated);
-    return;
-  }
-  try {
-    const docRef = doc(db, 'members', id);
-    await updateDoc(docRef, member as any);
-  } catch (error) {
-    setFallback();
-    await updateMember(id, member);
-  }
+  const docRef = doc(db, 'members', id);
+  await updateDoc(docRef, member as any);
 }
 
 export async function deleteMember(id: string): Promise<void> {
-  if (useFallback) {
-    const local = getLocal<Member[]>('members', []);
-    const updated = local.filter((m: any) => m.id !== id);
-    saveLocal('members', updated);
-    return;
-  }
-  try {
-    await deleteDoc(doc(db, 'members', id));
-  } catch (error) {
-    setFallback();
-    await deleteMember(id);
-  }
+  await deleteDoc(doc(db, 'members', id));
 }
 
 // ─── Attendance ─────────────────────────────────────────────────────────────
 
 export async function getAttendance(dateStr?: string): Promise<Attendance[]> {
-  if (useFallback) {
-    const local = getLocal<Attendance[]>('attendance', []);
-    if (dateStr) {
-      return local.filter((a: any) => a.date === dateStr);
-    }
-    return local;
+  const colRef = collection(db, 'attendance');
+  let q = query(colRef);
+  if (dateStr) {
+    q = query(colRef, where('date', '==', dateStr));
   }
-  try {
-    const colRef = collection(db, 'attendance');
-    let q = query(colRef);
-    if (dateStr) {
-      q = query(colRef, where('date', '==', dateStr));
-    }
-    const snap = await getDocs(q);
-    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Attendance));
-  } catch (error) {
-    setFallback();
-    return getAttendance(dateStr);
-  }
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Attendance));
 }
 
 export async function markAttendance(visit: Attendance): Promise<Attendance> {
-  if (useFallback) {
-    const local = getLocal<Attendance[]>('attendance', []);
-    const newVisit = { id: `a_${Date.now()}`, ...visit };
-    local.push(newVisit);
-    saveLocal('attendance', local);
-    return newVisit;
-  }
-  try {
-    const docRef = await addDoc(collection(db, 'attendance'), visit);
-    return { id: docRef.id, ...visit };
-  } catch (error) {
-    setFallback();
-    return markAttendance(visit);
-  }
+  const docRef = await addDoc(collection(db, 'attendance'), visit);
+  return { id: docRef.id, ...visit };
 }
 
 // ─── Attendance Tracking System ─────────────────────────────────────────────
 
 export async function getAttendanceRecords(dateStr?: string): Promise<AttendanceRecord[]> {
-  if (useFallback) {
-    const local = getLocal<AttendanceRecord[]>('attendance_records', []);
-    if (dateStr) return local.filter(a => a.date === dateStr);
-    return local;
-  }
   try {
     const colRef = collection(db, 'attendance');
     let q = query(colRef, orderBy('checkInTimestamp', 'desc'));
@@ -381,27 +305,14 @@ export async function getAttendanceRecords(dateStr?: string): Promise<Attendance
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceRecord));
   } catch (error) {
-    console.warn('getAttendanceRecords failed.', error);
-    setFallback();
-    return getLocal<AttendanceRecord[]>('attendance_records', []);
+    console.warn('getAttendanceRecords failed:', error);
+    return [];
   }
 }
 
 export async function markCheckIn(record: Omit<AttendanceRecord, 'id'>): Promise<AttendanceRecord> {
-  if (useFallback) {
-    const local = getLocal<AttendanceRecord[]>('attendance_records', []);
-    const newRecord: AttendanceRecord = { id: `ar_${Date.now()}`, ...record };
-    local.push(newRecord);
-    saveLocal('attendance_records', local);
-    return newRecord;
-  }
-  try {
-    const docRef = await addDoc(collection(db, 'attendance'), record);
-    return { id: docRef.id, ...record };
-  } catch (error) {
-    setFallback();
-    return markCheckIn(record);
-  }
+  const docRef = await addDoc(collection(db, 'attendance'), record);
+  return { id: docRef.id, ...record };
 }
 
 export async function markCheckOut(attendanceId: string): Promise<void> {
@@ -409,37 +320,16 @@ export async function markCheckOut(attendanceId: string): Promise<void> {
   const checkOutTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
   const checkOutTimestamp = now.getTime();
 
-  if (useFallback) {
-    const local = getLocal<AttendanceRecord[]>('attendance_records', []);
-    const updated = local.map(a => {
-      if (a.id === attendanceId) {
-        const duration = Math.round((checkOutTimestamp - a.checkInTimestamp) / 60000);
-        return { ...a, checkOutTime, checkOutTimestamp, duration };
-      }
-      return a;
-    });
-    saveLocal('attendance_records', updated);
-    return;
-  }
-  try {
-    const docRef = doc(db, 'attendance', attendanceId);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      const duration = Math.round((checkOutTimestamp - (data.checkInTimestamp || 0)) / 60000);
-      await updateDoc(docRef, { checkOutTime, checkOutTimestamp, duration });
-    }
-  } catch (error) {
-    setFallback();
-    await markCheckOut(attendanceId);
+  const docRef = doc(db, 'attendance', attendanceId);
+  const snap = await getDoc(docRef);
+  if (snap.exists()) {
+    const data = snap.data();
+    const duration = Math.round((checkOutTimestamp - (data.checkInTimestamp || 0)) / 60000);
+    await updateDoc(docRef, { checkOutTime, checkOutTimestamp, duration });
   }
 }
 
 export function subscribeToAttendance(dateStr: string, callback: (records: AttendanceRecord[]) => void): Unsubscribe {
-  if (useFallback) {
-    callback(getLocal<AttendanceRecord[]>('attendance_records', []).filter(a => a.date === dateStr));
-    return () => {};
-  }
   const colRef = collection(db, 'attendance');
   const q = query(colRef, where('date', '==', dateStr), orderBy('checkInTimestamp', 'desc'));
   return onSnapshot(q, (snapshot) => {
@@ -447,80 +337,39 @@ export function subscribeToAttendance(dateStr: string, callback: (records: Atten
     callback(records);
   }, (error) => {
     console.warn('Attendance subscription failed:', error);
-    callback(getLocal<AttendanceRecord[]>('attendance_records', []).filter(a => a.date === dateStr));
+    callback([]);
   });
 }
 
 // ─── Staff Attendance ───────────────────────────────────────────────────────
 
 export async function getStaffAttendanceByDate(dateStr: string): Promise<DailyStaffAttendance[]> {
-  if (useFallback) {
-    return getLocal<DailyStaffAttendance[]>('staff_attendance', []).filter(a => a.date === dateStr);
-  }
-  try {
-    const colRef = collection(db, 'staff_attendance');
-    const q = query(colRef, where('date', '==', dateStr));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as DailyStaffAttendance));
-  } catch (error) {
-    setFallback();
-    return getLocal<DailyStaffAttendance[]>('staff_attendance', []).filter(a => a.date === dateStr);
-  }
+  const colRef = collection(db, 'staff_attendance');
+  const q = query(colRef, where('date', '==', dateStr));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as DailyStaffAttendance));
 }
 
 export async function getStaffMonthlyAttendance(staffId: string, month: string): Promise<DailyStaffAttendance[]> {
-  if (useFallback) {
-    return getLocal<DailyStaffAttendance[]>('staff_attendance', [])
-      .filter(a => a.staffId === staffId && a.date.startsWith(month));
-  }
-  try {
-    const colRef = collection(db, 'staff_attendance');
-    const startDate = `${month}-01`;
-    const endDate = `${month}-31`;
-    const q = query(colRef, 
-      where('staffId', '==', staffId), 
-      where('date', '>=', startDate), 
-      where('date', '<=', endDate)
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as DailyStaffAttendance));
-  } catch (error) {
-    setFallback();
-    return getLocal<DailyStaffAttendance[]>('staff_attendance', [])
-      .filter(a => a.staffId === staffId && a.date.startsWith(month));
-  }
+  const colRef = collection(db, 'staff_attendance');
+  const startDate = `${month}-01`;
+  const endDate = `${month}-31`;
+  const q = query(colRef, 
+    where('staffId', '==', staffId), 
+    where('date', '>=', startDate), 
+    where('date', '<=', endDate)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as DailyStaffAttendance));
 }
 
 export async function saveStaffAttendance(record: Omit<DailyStaffAttendance, 'id'>): Promise<DailyStaffAttendance> {
-  if (useFallback) {
-    const local = getLocal<DailyStaffAttendance[]>('staff_attendance', []);
-    const newRecord: DailyStaffAttendance = { id: `sa_${Date.now()}`, ...record };
-    local.push(newRecord);
-    saveLocal('staff_attendance', local);
-    return newRecord;
-  }
-  try {
-    const docRef = await addDoc(collection(db, 'staff_attendance'), record);
-    return { id: docRef.id, ...record };
-  } catch (error) {
-    setFallback();
-    return saveStaffAttendance(record);
-  }
+  const docRef = await addDoc(collection(db, 'staff_attendance'), record);
+  return { id: docRef.id, ...record };
 }
 
 export async function updateStaffAttendance(id: string, data: Partial<DailyStaffAttendance>): Promise<void> {
-  if (useFallback) {
-    const local = getLocal<DailyStaffAttendance[]>('staff_attendance', []);
-    const updated = local.map(a => a.id === id ? { ...a, ...data } : a);
-    saveLocal('staff_attendance', updated);
-    return;
-  }
-  try {
-    await updateDoc(doc(db, 'staff_attendance', id), data as any);
-  } catch (error) {
-    setFallback();
-    await updateStaffAttendance(id, data);
-  }
+  await updateDoc(doc(db, 'staff_attendance', id), data as any);
 }
 
 export async function initializeDailyAbsences(
@@ -598,23 +447,13 @@ export async function initializeDailyAbsences(
 // ─── Payslips ───────────────────────────────────────────────────────────────
 
 export async function getPayslips(month?: string): Promise<Payslip[]> {
-  if (useFallback) {
-    const local = getLocal<Payslip[]>('payslips', []);
-    if (month) return local.filter(p => p.month === month);
-    return local;
+  const colRef = collection(db, 'payslips');
+  let q = query(colRef);
+  if (month) {
+    q = query(colRef, where('month', '==', month));
   }
-  try {
-    const colRef = collection(db, 'payslips');
-    let q = query(colRef);
-    if (month) {
-      q = query(colRef, where('month', '==', month));
-    }
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Payslip));
-  } catch (error) {
-    setFallback();
-    return getLocal<Payslip[]>('payslips', []);
-  }
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Payslip));
 }
 
 export async function generatePayslip(
@@ -653,20 +492,8 @@ export async function generatePayslip(
     status: 'draft',
   };
 
-  if (useFallback) {
-    const local = getLocal<Payslip[]>('payslips', []);
-    const newPayslip: Payslip = { id: `ps_${Date.now()}`, ...payslip };
-    local.push(newPayslip);
-    saveLocal('payslips', local);
-    return newPayslip;
-  }
-  try {
-    const docRef = await addDoc(collection(db, 'payslips'), payslip);
-    return { id: docRef.id, ...payslip };
-  } catch (error) {
-    setFallback();
-    return generatePayslip(staffId, staffType, name, grossSalary, month, workingDays);
-  }
+  const docRef = await addDoc(collection(db, 'payslips'), payslip);
+  return { id: docRef.id, ...payslip };
 }
 
 export async function generateAllPayslips(
@@ -697,285 +524,165 @@ export async function generateAllPayslips(
 }
 
 export async function updatePayslipStatus(id: string, status: 'draft' | 'approved' | 'paid'): Promise<void> {
-  if (useFallback) {
-    const local = getLocal<Payslip[]>('payslips', []);
-    const updated = local.map(p => p.id === id ? { ...p, status } : p);
-    saveLocal('payslips', updated);
-    return;
-  }
-  try {
-    await updateDoc(doc(db, 'payslips', id), { status });
-  } catch (error) {
-    setFallback();
-    await updatePayslipStatus(id, status);
-  }
+  await updateDoc(doc(db, 'payslips', id), { status });
 }
 
 // ─── Staff ──────────────────────────────────────────────────────────────────
 
 export async function getStaff(): Promise<Staff[]> {
-  if (useFallback) return getLocal<Staff[]>('staff', []);
-  try {
-    const querySnapshot = await getDocs(collection(db, 'staff'));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Staff));
-  } catch (error) {
-    setFallback();
-    return getLocal<Staff[]>('staff', []);
-  }
+  const querySnapshot = await getDocs(collection(db, 'staff'));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Staff));
 }
 
 export async function addStaff(staff: Staff): Promise<Staff> {
-  if (useFallback) {
-    const local = getLocal<Staff[]>('staff', []);
-    const newStaff = { id: `s_${Date.now()}`, ...staff };
-    local.push(newStaff);
-    saveLocal('staff', local);
-    return newStaff;
-  }
-  try {
-    const docRef = await addDoc(collection(db, 'staff'), staff);
-    return { id: docRef.id, ...staff };
-  } catch (error) {
-    setFallback();
-    return addStaff(staff);
-  }
+  const docRef = await addDoc(collection(db, 'staff'), staff);
+  return { id: docRef.id, ...staff };
 }
 
 export async function updateStaffStatus(id: string, status: string): Promise<void> {
-  if (useFallback) {
-    const local = getLocal<Staff[]>('staff', []);
-    const updated = local.map((s: any) => s.id === id ? { ...s, status } : s);
-    saveLocal('staff', updated);
-    return;
-  }
-  try {
-    const docRef = doc(db, 'staff', id);
-    await updateDoc(docRef, { status });
-  } catch (error) {
-    setFallback();
-    await updateStaffStatus(id, status);
-  }
+  const docRef = doc(db, 'staff', id);
+  await updateDoc(docRef, { status });
 }
 
 export async function updateStaff(id: string, data: Partial<Staff>): Promise<void> {
-  if (useFallback) {
-    const local = getLocal<Staff[]>('staff', []);
-    const updated = local.map((s: any) => s.id === id ? { ...s, ...data } : s);
-    saveLocal('staff', updated);
-    return;
-  }
-  try {
-    const docRef = doc(db, 'staff', id);
-    await updateDoc(docRef, data as any);
-  } catch (error) {
-    setFallback();
-    await updateStaff(id, data);
-  }
+  const docRef = doc(db, 'staff', id);
+  await updateDoc(docRef, data as any);
 }
 
 export async function deleteStaff(id: string): Promise<void> {
-  if (useFallback) {
-    const local = getLocal<Staff[]>('staff', []);
-    const updated = local.filter((s: any) => s.id !== id);
-    saveLocal('staff', updated);
-    return;
-  }
-  try {
-    await deleteDoc(doc(db, 'staff', id));
-  } catch (error) {
-    setFallback();
-    await deleteStaff(id);
-  }
+  await deleteDoc(doc(db, 'staff', id));
 }
 
 // ─── Trainers ───────────────────────────────────────────────────────────────
 
 export async function getTrainers(): Promise<Trainer[]> {
-  if (useFallback) return getLocal<Trainer[]>('trainers', []);
-  try {
-    const querySnapshot = await getDocs(collection(db, 'trainers'));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trainer));
-  } catch (error) {
-    setFallback();
-    return getLocal<Trainer[]>('trainers', []);
-  }
+  const querySnapshot = await getDocs(collection(db, 'trainers'));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Trainer));
 }
 
 export async function addTrainer(trainer: Trainer): Promise<Trainer> {
-  if (useFallback) {
-    const local = getLocal<Trainer[]>('trainers', []);
-    const newTrainer = { id: `t_${Date.now()}`, ...trainer };
-    local.push(newTrainer);
-    saveLocal('trainers', local);
-    return newTrainer;
-  }
-  try {
-    const docRef = await addDoc(collection(db, 'trainers'), trainer);
-    return { id: docRef.id, ...trainer };
-  } catch (error) {
-    setFallback();
-    return addTrainer(trainer);
-  }
+  const docRef = await addDoc(collection(db, 'trainers'), trainer);
+  return { id: docRef.id, ...trainer };
+}
+
+export async function updateTrainer(id: string, data: Partial<Trainer>): Promise<void> {
+  const docRef = doc(db, 'trainers', id);
+  await updateDoc(docRef, data as Record<string, unknown>);
+}
+
+export async function deleteTrainer(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'trainers', id));
 }
 
 // ─── Reviews ────────────────────────────────────────────────────────────────
 
 export async function getReviews(): Promise<Review[]> {
-  if (useFallback) return getLocal<Review[]>('reviews', []);
-  try {
-    const querySnapshot = await getDocs(collection(db, 'reviews'));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Review));
-  } catch (error) {
-    setFallback();
-    return getLocal<Review[]>('reviews', []);
-  }
+  const querySnapshot = await getDocs(collection(db, 'reviews'));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Review));
 }
 
 export async function addReview(review: Review): Promise<Review> {
-  if (useFallback) {
-    const local = getLocal<Review[]>('reviews', []);
-    const newReview = { id: `r_${Date.now()}`, ...review };
-    local.push(newReview);
-    saveLocal('reviews', local);
-    return newReview;
-  }
-  try {
-    const docRef = await addDoc(collection(db, 'reviews'), review);
-    return { id: docRef.id, ...review };
-  } catch (error) {
-    setFallback();
-    return addReview(review);
-  }
+  const docRef = await addDoc(collection(db, 'reviews'), review);
+  return { id: docRef.id, ...review };
 }
 
 // ─── Offers ─────────────────────────────────────────────────────────────────
 
 export async function getOffers(): Promise<Offer[]> {
-  if (useFallback) return getLocal<Offer[]>('offers', []);
-  try {
-    const querySnapshot = await getDocs(collection(db, 'offers'));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Offer));
-  } catch (error) {
-    setFallback();
-    return getLocal<Offer[]>('offers', []);
-  }
+  const querySnapshot = await getDocs(collection(db, 'offers'));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Offer));
 }
 
 export async function addOffer(offer: Offer): Promise<Offer> {
-  if (useFallback) {
-    const local = getLocal<Offer[]>('offers', []);
-    const newOffer = { id: `o_${Date.now()}`, ...offer };
-    local.push(newOffer);
-    saveLocal('offers', local);
-    return newOffer;
-  }
-  try {
-    const docRef = await addDoc(collection(db, 'offers'), offer);
-    return { id: docRef.id, ...offer };
-  } catch (error) {
-    setFallback();
-    return addOffer(offer);
-  }
+  const docRef = await addDoc(collection(db, 'offers'), offer);
+  return { id: docRef.id, ...offer };
 }
 
 // ─── Measurements ───────────────────────────────────────────────────────────
 
 export async function getMeasurements(phone?: string): Promise<Measurement[]> {
-  if (useFallback) {
-    const local = getLocal<Measurement[]>('measurements', []);
-    if (phone) {
-      return local.filter((m: any) => m.phone === phone);
-    }
-    return local;
+  const colRef = collection(db, 'measurements');
+  let q = query(colRef);
+  if (phone) {
+    q = query(colRef, where('phone', '==', phone));
   }
-  try {
-    const colRef = collection(db, 'measurements');
-    let q = query(colRef);
-    if (phone) {
-      q = query(colRef, where('phone', '==', phone));
-    }
-    const snap = await getDocs(q);
-    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as Measurement));
-  } catch (error) {
-    setFallback();
-    return getMeasurements(phone);
-  }
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as Measurement));
 }
 
 export async function addMeasurement(measurement: Measurement): Promise<Measurement> {
-  if (useFallback) {
-    const local = getLocal<Measurement[]>('measurements', []);
-    const newM = { id: `me_${Date.now()}`, ...measurement };
-    local.push(newM);
-    saveLocal('measurements', local);
-    return newM;
-  }
-  try {
-    const docRef = await addDoc(collection(db, 'measurements'), measurement);
-    return { id: docRef.id, ...measurement } as unknown as Measurement;
-  } catch (error) {
-    setFallback();
-    return addMeasurement(measurement);
-  }
+  const docRef = await addDoc(collection(db, 'measurements'), measurement);
+  return { id: docRef.id, ...measurement } as unknown as Measurement;
 }
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 
 export async function getSettings(): Promise<any> {
-  if (useFallback) return getLocal('settings', null);
-  try {
-    const docRef = doc(db, 'settings', 'global');
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      return snap.data();
-    }
-    return null;
-  } catch (error) {
-    setFallback();
-    return getLocal('settings', null);
+  const docRef = doc(db, 'settings', 'global');
+  const snap = await getDoc(docRef);
+  if (snap.exists()) {
+    return snap.data();
   }
+  return null;
 }
 
 export async function saveSettings(settings: any): Promise<void> {
-  if (useFallback) {
-    saveLocal('settings', settings);
-    return;
-  }
-  try {
-    const docRef = doc(db, 'settings', 'global');
-    await setDoc(docRef, settings, { merge: true });
-  } catch (error) {
-    setFallback();
-    await saveSettings(settings);
-  }
+  const docRef = doc(db, 'settings', 'global');
+  await setDoc(docRef, settings, { merge: true });
 }
 
 // ─── Removed Members ────────────────────────────────────────────────────────
 
 export async function getRemovedMembers(): Promise<RemovedMember[]> {
-  if (useFallback) return getLocal<RemovedMember[]>('removed_members', []);
-  try {
-    const querySnapshot = await getDocs(collection(db, 'removed_members'));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RemovedMember));
-  } catch (error) {
-    setFallback();
-    return getLocal<RemovedMember[]>('removed_members', []);
-  }
+  const querySnapshot = await getDocs(collection(db, 'removed_members'));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RemovedMember));
 }
 
 export async function addRemovedMember(removedMember: RemovedMember): Promise<RemovedMember> {
-  if (useFallback) {
-    const local = getLocal<RemovedMember[]>('removed_members', []);
-    const newEntry = { id: `rm_${Date.now()}`, ...removedMember };
-    local.push(newEntry);
-    saveLocal('removed_members', local);
-    return newEntry;
-  }
-  try {
-    const docRef = await addDoc(collection(db, 'removed_members'), removedMember);
-    return { id: docRef.id, ...removedMember };
-  } catch (error) {
-    setFallback();
-    return addRemovedMember(removedMember);
-  }
+  const docRef = await addDoc(collection(db, 'removed_members'), removedMember);
+  return { id: docRef.id, ...removedMember };
+}
+
+// ─── Receipts ────────────────────────────────────────────────────────────────
+
+export interface Receipt {
+  id?: string;
+  receiptNo: string;
+  memberId: string;
+  memberName: string;
+  memberPhone: string;
+  plan: string;
+  amount: string;
+  startDate: string;
+  expiryDate: string;
+  paymentMode: string;
+  trainer: string;
+  date: string;
+  timestamp: number;
+  gymName: string;
+  gymAddress: string;
+  gymPhone: string;
+  gymEmail: string;
+  sentViaWhatsApp: boolean;
+}
+
+export async function getReceipts(): Promise<Receipt[]> {
+  const querySnapshot = await getDocs(collection(db, 'receipts'));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Receipt));
+}
+
+export async function getReceiptsByMember(memberId: string): Promise<Receipt[]> {
+  const colRef = collection(db, 'receipts');
+  const q = query(colRef, where('memberId', '==', memberId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Receipt));
+}
+
+export async function addReceipt(receipt: Receipt): Promise<Receipt> {
+  const docRef = await addDoc(collection(db, 'receipts'), receipt);
+  return { id: docRef.id, ...receipt };
+}
+
+export async function updateReceipt(id: string, data: Partial<Receipt>): Promise<void> {
+  await updateDoc(doc(db, 'receipts', id), data as any);
 }

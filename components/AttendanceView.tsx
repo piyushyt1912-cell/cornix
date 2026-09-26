@@ -74,7 +74,9 @@ export default function AttendanceView({
 
   // Biometric service listeners
   useEffect(() => {
-    setBiometricStatus(biometricService.getStatus());
+    // Initialize status via callback to avoid synchronous setState in effect
+    const currentStatus = biometricService.getStatus();
+    const initTimer = setTimeout(() => setBiometricStatus(currentStatus), 0);
 
     biometricService.onDeviceStatus((status) => {
       setBiometricStatus(status as any);
@@ -87,6 +89,7 @@ export default function AttendanceView({
     });
 
     return () => {
+      clearTimeout(initTimer);
       biometricService.removeAllListeners();
     };
   }, []);

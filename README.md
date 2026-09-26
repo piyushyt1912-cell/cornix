@@ -17,3 +17,4 @@ https://ai.studio/apps/328233d2-6ef4-4f91-9e6b-25d57be26025
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+# cornix
