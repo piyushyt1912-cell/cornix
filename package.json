@@ -1,13 +1,16 @@
 {
-  "name": "ai-studio-applet",
-  "version": "0.1.0",
+  "name": "corenix-club-software",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "clean": "next clean"
+    "lint:fix": "eslint . --fix",
+    "clean": "next clean",
+    "deploy": "vercel --prod",
+    "deploy:preview": "vercel"
   },
   "dependencies": {
     "@google/genai": "^1.17.0",

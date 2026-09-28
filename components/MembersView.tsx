@@ -717,7 +717,7 @@ function MemberProfile({ member, onBack, onUpdate, trainers, isLightMode, settin
   const [renewAmount, setRenewAmount] = useState(plans[0]?.price?.toString() || '999');
   
   const [receipts, setReceipts] = useState<Receipt[]>([]);
-  const [loadingReceipts, setLoadingReceipts] = useState(false);
+  const [loadingReceipts, setLoadingReceipts] = useState(!!member?.id);
   const [viewReceipt, setViewReceipt] = useState<Receipt | null>(null);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -741,10 +741,15 @@ function MemberProfile({ member, onBack, onUpdate, trainers, isLightMode, settin
 
   useEffect(() => {
     if (member?.id) {
-      setLoadingReceipts(true);
+      let cancelled = false;
       getReceiptsByMember(member.id)
-        .then(data => setReceipts(data.sort((a, b) => b.timestamp - a.timestamp)))
-        .finally(() => setLoadingReceipts(false));
+        .then(data => {
+          if (!cancelled) setReceipts(data.sort((a, b) => b.timestamp - a.timestamp));
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingReceipts(false);
+        });
+      return () => { cancelled = true; };
     }
   }, [member?.id]);
 

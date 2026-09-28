@@ -33,6 +33,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
+  compress: true,
   eslint: {
     ignoreDuringBuilds: false,
   },
@@ -42,7 +44,6 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [],
   },
-  output: 'standalone',
   transpilePackages: ['motion'],
   
   // Security headers — applied to all routes

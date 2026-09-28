@@ -70,7 +70,7 @@ export default function AttendanceView({
       onAttendanceUpdate(records);
     });
     return () => unsub();
-  }, [todayStr]);
+  }, [todayStr, onAttendanceUpdate]);
 
   // Biometric service listeners
   useEffect(() => {
